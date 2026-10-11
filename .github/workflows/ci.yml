@@ -1,0 +1,44 @@
+name: ci
+
+# Code changes only. Railway's daily job commits reports and data into this
+# repository; those commits must not run CI (or redeploy Railway, which is
+# gated separately by the service's watch patterns).
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "data/**"
+      - "reports/**"
+      - "resources/**"
+      - "research/**"
+      - "**/*.md"
+  pull_request:
+    paths-ignore:
+      - "data/**"
+      - "reports/**"
+      - "resources/**"
+      - "research/**"
+      - "**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
