@@ -24,7 +24,6 @@ const manifest: PaperclipPluginManifestV1 = {
     "Project Kinly by Vantik Systems. Covers what is trending on GitHub today, this week and over the last 18 months, what each repository does, and whether it is worth testing for Vantik Systems or FeetBit. Includes a console, agent tools, a managed Kinly researcher, a skill, and an optional daily brief.",
   author: "Vantik Systems",
   categories: ["ui", "automation", "connector"],
-  minimumHostVersion: "2026.1005.0",
   capabilities: [
     "ui.page.register",
     "ui.sidebar.register",

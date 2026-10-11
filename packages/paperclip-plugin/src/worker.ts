@@ -51,7 +51,10 @@ const plugin = definePlugin({
       if (!config.enabled) return { agent: "skipped (disabled)", skill: "skipped (disabled)" };
       const out: Record<string, string> = {};
       try {
-        out["agent"] = (await ctx.agents.managed.reconcile("kinly", companyId)).status;
+        const current = await ctx.agents.managed.get("kinly", companyId);
+        // A company that requires board approval for new agents holds the hire until a human approves it.
+        if ((current.agent?.status as string | undefined) === "pending_approval") out["agent"] = "pending board approval";
+        else out["agent"] = (await ctx.agents.managed.reconcile("kinly", companyId)).status;
       } catch (err) {
         out["agent"] = `error: ${err instanceof Error ? err.message : String(err)}`;
       }
@@ -63,9 +66,16 @@ const plugin = definePlugin({
       return out;
     };
 
+    // The host lets background work act only for companies with a saved Kinly config; others are skipped, not fatal.
     const reconcileAll = async (): Promise<Record<string, Record<string, string>>> => {
       const result: Record<string, Record<string, string>> = {};
-      for (const company of await ctx.companies.list({ limit: 100 })) result[company.id] = await reconcileCompany(company.id);
+      for (const company of await ctx.companies.list({ limit: 100 })) {
+        try {
+          result[company.id] = await reconcileCompany(company.id);
+        } catch (err) {
+          result[company.id] = { skipped: err instanceof Error ? err.message : String(err) };
+        }
+      }
       ctx.logger.info("kinly: reconciled managed agent and skill", { result });
       return result;
     };

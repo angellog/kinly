@@ -36,8 +36,8 @@ export const CONFIG_SCHEMA = {
       description: "A company secret holding KINLY_API_TOKEN. Needed for shortlisting, rating, resource pages, ask and research. Reading works without it.",
     },
     dailyBrief: { type: "boolean", title: "Post a daily brief issue", description: "At 07:00 UTC, upsert one issue per day with the Kinly daily report.", default: false },
-    briefAssigneeAgentId: { type: "string", title: "Brief assignee (agent id)", description: "Optional. Leave empty to leave the brief unassigned.", "x-paperclip-advanced": true },
-    focus: { type: "string", title: "Business focus", description: "Vantik Systems, FeetBit, or both.", default: "Vantik Systems and FeetBit", "x-paperclip-advanced": true },
+    briefAssigneeAgentId: { type: "string", title: "Brief assignee (agent id)", description: "Optional. Leave empty to leave the brief unassigned." },
+    focus: { type: "string", title: "Business focus", description: "Vantik Systems, FeetBit, or both.", default: "Vantik Systems and FeetBit" },
   },
   additionalProperties: false,
 } as const;
