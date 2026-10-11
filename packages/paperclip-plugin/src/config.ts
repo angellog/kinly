@@ -22,7 +22,7 @@ export interface KinlyCompanyConfig {
 }
 
 /** The Railway service. Updated at deploy time; every company may override it. */
-export const DEFAULT_API_URL = "https://kinly-api.up.railway.app";
+export const DEFAULT_API_URL = "https://kinly-api-production.up.railway.app";
 
 export const CONFIG_SCHEMA = {
   type: "object",

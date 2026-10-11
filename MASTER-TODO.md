@@ -49,8 +49,8 @@ Loop rule: every item below must be ticked `[x]` before the loop stops. An item 
 - [x] F1 `git init`, `.gitignore`, MIT LICENSE, first commit
 - [ ] F2 `gh repo create angellog/kinly --public --source . --push` and `angellog/kinly-data` (public) seeded with data/, reports/, resources/
 - [ ] F3 Railway service connected to the GitHub repo (deploy on push)
-- [ ] F4 README (what Kinly is, quick start, architecture, how to read a report, how to rate)
-- [ ] F5 docs/: ARCHITECTURE, API, CATEGORIES, SCORING, PAPERCLIP, RAILWAY, WORKFLOW
+- [x] F4 README (what Kinly is, quick start, architecture, how to read a report, how to rate)
+- [x] F5 docs/: ARCHITECTURE, API, CATEGORIES, SCORING, PAPERCLIP, RAILWAY, WORKFLOW
 - [ ] F6 CI green on `main`
 
 ## R. Review changes (PLAN.md `## GSTACK REVIEW REPORT`)

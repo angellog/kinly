@@ -1,6 +1,6 @@
 # API
 
-The base URL is the Railway service, for example `https://kinly-api.up.railway.app`. Responses are JSON.
+The base URL is the Railway service, for example `https://kinly-api-production.up.railway.app`. Responses are JSON.
 
 - **GET** routes are public, sent with `Cache-Control: public, max-age=300`, and rate-limited per client IP to 60 a minute with a burst of 120.
 - **POST** routes and `/api/export` need `Authorization: Bearer <KINLY_API_TOKEN>`.
