@@ -1,0 +1,38 @@
+{
+  "name": "@kinly/paperclip-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Paperclip plugin vantik.kinly: the Kinly console, agent tools, managed Kinly agent and skill, and a daily brief job.",
+  "license": "MIT",
+  "author": "Vantik Systems",
+  "scripts": {
+    "gen": "node ./scripts/gen-instructions.mjs",
+    "build": "node ./scripts/gen-instructions.mjs && node ./esbuild.config.mjs",
+    "typecheck": "node ./scripts/gen-instructions.mjs && tsc -p tsconfig.json --noEmit",
+    "test": "node ./scripts/gen-instructions.mjs && tsc -p tsconfig.test.json && node --test --test-reporter=spec \".test-dist/test/**/*.test.js\"",
+    "check": "npm run typecheck && npm test && npm run build && npm run validate",
+    "validate": "node ./scripts/validate-manifest.mjs"
+  },
+  "paperclipPlugin": {
+    "manifest": "./dist/manifest.js",
+    "worker": "./dist/worker.js",
+    "ui": "./dist/ui/"
+  },
+  "keywords": [
+    "paperclip",
+    "plugin",
+    "kinly",
+    "vantik"
+  ],
+  "devDependencies": {
+    "@paperclipai/plugin-sdk": "2026.1005.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.8",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "react": ">=19"
+  }
+}

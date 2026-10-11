@@ -29,11 +29,11 @@ Loop rule: every item below must be ticked `[x]` before the loop stops. An item 
 - [ ] C6 Stars folded in: `data/user/profile.json` derived; "My stars" overlap in reports
 
 ## D. Server and Railway
-- [ ] D1 HTTP API per PLAN §3.8 with bearer auth on writes; tests
-- [ ] D2 Scheduler (cron matcher, UTC) + `runs` ledger + `/api/status`
-- [ ] D3 Boot import from the public repo when the DB is empty
-- [ ] D4 Repo sync (Contents / Git Data API) behind `GITHUB_TOKEN`; no-op without it
-- [ ] D5 Dockerfile + `.env.example` (no `railway.toml` — deprecated for new services); local Docker-free smoke run of the built server
+- [x] D1 HTTP API per PLAN §3.8 with bearer auth on writes; tests
+- [x] D2 Scheduler (cron matcher, UTC) + `runs` ledger + `/api/status`
+- [x] D3 Boot import from the public repo when the DB is empty
+- [x] D4 Repo sync (Contents / Git Data API) behind `GITHUB_TOKEN`; no-op without it
+- [x] D5 Dockerfile + `.env.example` (no `railway.toml` — deprecated for new services); local Docker-free smoke run of the built server
 - [ ] D6 Railway project `kinly` + service + 1 GB volume at `/data` + public domain; variables set without printing values; healthcheck + watch patterns set via MCP `update-service`, and a docs-only commit verified SKIPPED in `list-deployments`
 - [ ] D7 Deployed service answers `/api/health` and `/api/trending?window=today` with real rows
 

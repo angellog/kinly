@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "noUncheckedIndexedAccess": true,
+    "types": ["node"],
+    "rootDir": ".",
+    "outDir": ".test-dist"
+  },
+  "include": ["src/config.ts", "src/client.ts", "src/tools.ts", "src/brief.ts", "src/format.ts", "src/generated/*.ts", "src/manifest.ts", "test"]
+}
