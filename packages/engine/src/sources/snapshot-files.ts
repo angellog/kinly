@@ -52,7 +52,11 @@ export function readSnapshotFile(file: string): SnapshotFile | null {
     const parsed = JSON.parse(readFileSync(file, "utf8")) as SnapshotFile;
     if (!parsed || !Array.isArray(parsed.lists) || !isIsoDate(parsed.list_date)) return null;
     if (!SOURCE_IDS.includes(parsed.source)) return null;
-    return parsed;
+    // A snapshot from the public repo is input from the internet (R1): keep only well-formed lists of the file's own source and date.
+    const lists = parsed.lists.filter(
+      (l) => l && l.source === parsed.source && l.list_date === parsed.list_date && ["daily", "weekly", "monthly"].includes(l.window) && typeof l.language_list === "string" && l.language_list.length <= 40 && Array.isArray(l.entries) && l.entries.length <= 500,
+    );
+    return { ...parsed, lists };
   } catch {
     return null;
   }

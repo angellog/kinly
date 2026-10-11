@@ -1,0 +1,22 @@
+{
+  "name": "@kinly/server",
+  "version": "0.1.0",
+  "description": "Project Kinly HTTP API and scheduler (Railway).",
+  "license": "MIT",
+  "author": "Vantik Systems",
+  "type": "module",
+  "main": "./dist/src/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test --test-reporter=spec \"dist/test/**/*.test.js\"",
+    "start": "node dist/src/main.js"
+  },
+  "dependencies": {
+    "@kinly/engine": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.3"
+  }
+}

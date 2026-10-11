@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.env
+.env.*
+!.env.example
+.kinly
+.tmp
+data
+reports
+resources
+research
+docs
+*.md

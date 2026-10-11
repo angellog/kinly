@@ -452,8 +452,8 @@ export class Store {
     const where: string[] = [];
     const params: SQLInputValue[] = [];
     if (filter.q) {
-      const like = `%${filter.q.toLowerCase()}%`;
-      where.push("(LOWER(r.full_name) LIKE ? OR LOWER(COALESCE(r.description,'')) LIKE ? OR LOWER(r.topics) LIKE ? OR LOWER(COALESCE(r.summary,'')) LIKE ?)");
+      const like = `%${filter.q.toLowerCase().slice(0, 100).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      where.push("(LOWER(r.full_name) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(r.description,'')) LIKE ? ESCAPE '\\' OR LOWER(r.topics) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(r.summary,'')) LIKE ? ESCAPE '\\')");
       params.push(like, like, like, like);
     }
     if (filter.category) {

@@ -64,3 +64,39 @@ describe("daily pipeline (D12)", () => {
     store.close();
   });
 });
+
+describe("boot import and publish guards (D3, D4, D5)", () => {
+  it("rebuilds an empty store from the data repo's manifest over raw URLs, refusing paths outside data/", async () => {
+    const snapshot = { source: "larsbijl-archive", list_date: "2026-10-07", written_at: "x", lists: [{ source: "larsbijl-archive", window: "daily", list_date: "2026-10-07", language_list: "go", fetched_at: "x", entries: [{ full_name: "ollama/ollama", rank: 1 }] }] };
+    const files: Record<string, string> = {
+      "data/manifest.json": JSON.stringify({ files: ["data/snapshots/larsbijl-archive/2026-10/2026-10-07.json", "../etc/passwd", "packages/evil.js"] }),
+      "data/snapshots/larsbijl-archive/2026-10/2026-10-07.json": JSON.stringify(snapshot),
+    };
+    const requested: string[] = [];
+    const raw = (async (input: string | URL | Request) => {
+      const url = String(input);
+      requested.push(url);
+      const key = url.replace("https://raw.githubusercontent.com/angellog/kinly-data/main/", "");
+      return key in files ? new Response(files[key], { status: 200 }) : new Response("404", { status: 404 });
+    }) as typeof fetch;
+    const { ctx, store } = context(raw);
+    const got = await jobs.fetchDataFromRepo(ctx, { fetchImpl: raw });
+    assert.equal(got.files, 1);
+    assert.ok(!requested.some((u) => u.includes("passwd") || u.includes("evil")));
+    const imported = jobs.importData(ctx);
+    assert.ok(imported.appearances >= 1);
+    assert.equal(store.signals("ollama/ollama").distinct_days, 1);
+    store.close();
+  });
+
+  it("publish is a no-op without a token and refuses the owner's gh token unless asked", async () => {
+    const { ctx, store } = context(offlineGitHub);
+    assert.deepEqual(await jobs.publishToRepo(ctx), { committed: false, reason: "no token" });
+    const root = mkdtempSync(path.join(tmpdir(), "kinly-pub-"));
+    dirs.push(root);
+    const ghConfig = loadConfig({ root, dataRoot: root, dbPath: ":memory:", githubToken: "gho_x", githubTokenSource: "gh", anthropicKey: "", apiToken: null });
+    const ghCtx = jobs.makeContext(store, ghConfig, { fetchImpl: offlineGitHub, log: () => undefined });
+    assert.deepEqual(await jobs.publishToRepo(ghCtx), { committed: false, reason: "gh token refused" });
+    store.close();
+  });
+});

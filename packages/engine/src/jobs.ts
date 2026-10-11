@@ -21,7 +21,7 @@ import { fetchUserStars, readStarsFile, type UserStar } from "./sources/stars.js
 import { fetchAllTrending } from "./sources/trending-page.js";
 import { fetchVitaletsComments, parseVitaletsComment } from "./sources/vitalets-archive.js";
 import type { Store } from "./store/store.js";
-import type { Profile, RepoRecord, Snapshot } from "./types.js";
+import type { CategoryId, Profile, RepoRecord, RepoView, Snapshot } from "./types.js";
 import { addDays, dateRange, isoDate, isoNow, isoWeek } from "./util/dates.js";
 import { isFullName } from "./util/text.js";
 import { rankedList, rescoreAll, repoView } from "./views.js";
@@ -669,6 +669,100 @@ export async function runDaily(ctx: JobContext, options: { date?: string; publis
       out["publish"] = await recorded(ctx, "publish", () => publishToRepo(ctx, { message: `kinly: daily ${date}`, ...(options.allowGhToken ? { allowGhToken: true } : {}) }));
     } catch (err) {
       // The report exists locally and in the DB; a failed push is retried by the next run.
+      out["publish"] = { committed: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+  return out;
+}
+
+// ─── ask / research (LLM over the database, capped by D11) ───────────────────
+
+/** A compact, plain-text card for one repo: what the LLM sees as context. Third-party text is fenced as data (D15). */
+export function repoCard(v: RepoView): string {
+  const r = v.repo;
+  return [
+    `repo: ${r.full_name}`,
+    `category: ${r.category} · stars: ${r.stars ?? "?"} · licence: ${r.license_spdx ?? r.license_class}${r.open_core ? " (open-core)" : ""} · score ${v.score.total} ${v.score.verdict} · relevance ${v.relevance}`,
+    `trending: ${v.signals.distinct_weeks} weeks, ${v.signals.distinct_days} days, ${v.signals.first_seen ?? "—"} → ${v.signals.last_seen ?? "—"}`,
+    `owner state: ${v.starred ? "starred; " : ""}${v.shortlist ? `shortlist ${v.shortlist.status}; ` : ""}${v.rating ? `rated ${v.rating.rating}/5; ` : ""}`.trim(),
+    "description (untrusted, from the repository): <<<",
+    (r.summary ?? r.description ?? "").slice(0, 400),
+    ">>>",
+    r.business_use ? `business use (Kinly): ${r.business_use.slice(0, 400)}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function contextFor(ctx: JobContext, profile: Profile, terms: string[], category?: CategoryId, limit = 30): RepoView[] {
+  const seen = new Set<string>();
+  const out: RepoView[] = [];
+  const push = (r: RepoRecord): void => {
+    if (seen.has(r.full_name) || out.length >= limit) return;
+    seen.add(r.full_name);
+    out.push(repoView(ctx.store, r, profile));
+  };
+  for (const t of terms) for (const r of ctx.store.listRepos({ q: t, ...(category ? { category } : {}), sort: "score", limit: 12 }).rows) push(r);
+  if (out.length < limit) for (const r of ctx.store.listRepos({ ...(category ? { category } : {}), sort: "score", limit: limit - out.length }).rows) push(r);
+  return out;
+}
+
+const STOP = new Set(["the", "a", "an", "and", "or", "for", "to", "of", "in", "on", "is", "are", "what", "which", "how", "can", "i", "we", "my", "our", "me", "with", "that", "this", "it", "be", "do", "should", "best", "good", "any", "there", "repo", "repos", "repository", "repositories", "github", "trending", "use", "using"]);
+
+function searchTerms(text: string): string[] {
+  return [...new Set(text.toLowerCase().split(/[^a-z0-9+#.-]+/).filter((w) => w.length >= 3 && !STOP.has(w)))].slice(0, 8);
+}
+
+/** Answer a question from the database. Without an LLM it returns the matching repos and says so. */
+export async function ask(ctx: JobContext, profile: Profile, question: string): Promise<{ answer: string | null; repos: string[]; llm: boolean; reason?: string }> {
+  const q = question.trim().slice(0, 1000);
+  if (!q) throw new Error("question is empty");
+  const views = contextFor(ctx, profile, searchTerms(q));
+  const names = views.map((v) => v.repo.full_name);
+  if (!ctx.llm.available) return { answer: null, repos: names.slice(0, 10), llm: false, reason: "no ANTHROPIC_API_KEY: these are the closest matches by keyword and score" };
+  if (ctx.llm.capReached()) return { answer: null, repos: names.slice(0, 10), llm: false, reason: "daily LLM token cap reached" };
+  const out = await ctx.llm.ask(q, views.map(repoCard), profile);
+  if (!out) return { answer: null, repos: names.slice(0, 10), llm: false, reason: "the model did not answer; see the server log" };
+  return { answer: out.answer, repos: out.repos.filter((n) => names.includes(n)), llm: true };
+}
+
+/** A focused research brief on a topic or category: the ranked repos, plus an LLM synthesis when available. */
+export async function research(ctx: JobContext, profile: Profile, input: { topic?: string; category?: CategoryId; limit?: number }): Promise<{ title: string; repos: Array<{ full_name: string; score: number; verdict: string; relevance: number; summary: string | null }>; synthesis: string | null; llm: boolean }> {
+  const topic = (input.topic ?? "").trim().slice(0, 200);
+  if (!topic && !input.category) throw new Error("research needs a topic or a category");
+  const views = contextFor(ctx, profile, topic ? searchTerms(topic) : [], input.category, Math.min(40, input.limit ?? 25));
+  views.sort((a, b) => b.relevance * 0.5 + b.score.total * 0.5 - (a.relevance * 0.5 + a.score.total * 0.5));
+  const title = topic ? `Research: ${topic}${input.category ? ` (${input.category})` : ""}` : `Research: ${input.category}`;
+  let synthesis: string | null = null;
+  if (ctx.llm.available && !ctx.llm.capReached() && views.length > 0) {
+    const out = await ctx.llm.ask(
+      `Write a short research brief for the owner on "${topic || input.category}": which of these repositories matter for Vantik Systems or FeetBit, which to test first and why, and which to skip. Name repositories by owner/name.`,
+      views.map(repoCard),
+      profile,
+    );
+    synthesis = out?.answer ?? null;
+  }
+  return {
+    title,
+    repos: views.map((v) => ({ full_name: v.repo.full_name, score: v.score.total, verdict: v.score.verdict, relevance: v.relevance, summary: v.repo.summary ?? v.repo.description })),
+    synthesis,
+    llm: synthesis !== null,
+  };
+}
+
+/** The weekly report on its own (the daily pipeline also writes it on Mondays); used for catch-up. */
+export async function runWeekly(ctx: JobContext, options: { date?: string; publish?: boolean; allowGhToken?: boolean } = {}): Promise<Record<string, unknown>> {
+  const date = options.date ?? isoDate();
+  const credentials = await credentialStates(ctx);
+  const profile = loadProfile(ctx);
+  const out: Record<string, unknown> = { date };
+  out["weekly"] = await recorded(ctx, "report-weekly", async () => writeWeekly(ctx, profile, date, ["trending-page"], credentials));
+  ctx.store.setMeta("last_weekly_ok", isoWeek(date));
+  out["export"] = await recorded(ctx, "export", async () => ({ ...exportData(ctx), manifest: writeDataManifest(ctx) }));
+  if (options.publish ?? true) {
+    try {
+      out["publish"] = await recorded(ctx, "publish", () => publishToRepo(ctx, { message: `kinly: weekly ${isoWeek(date)}`, ...(options.allowGhToken ? { allowGhToken: true } : {}) }));
+    } catch (err) {
       out["publish"] = { committed: false, error: err instanceof Error ? err.message : String(err) };
     }
   }

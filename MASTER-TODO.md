@@ -54,16 +54,16 @@ Loop rule: every item below must be ticked `[x]` before the loop stops. An item 
 - [ ] F6 CI green on `main`
 
 ## R. Review changes (PLAN.md `## GSTACK REVIEW REPORT`)
-- [ ] R-a Split data from code: `KINLY_DATA_ROOT` (data/, reports/, resources/) → `~/Projects/kinly-data` locally, `/data/repo` on Railway; `KINLY_DATA_REPO=angellog/kinly-data`; `publish` refuses the `gh` token without `--use-gh-token` (R1, D5)
-- [ ] R-b Export never writes `readme_excerpt`; larsbijl snapshots ship its MIT notice; vitalets stays local (R6)
-- [ ] R-c Ingest sanitizer: strip HTML/control chars, cap lengths; test with `<img onerror>` + injected instruction (R2, D15)
-- [ ] R-d Picks: suppress starred / shortlisted / picked-in-30-days, relevance ≥ 50 and score ≥ 45, novelty term, WIP limit 5; category weights seeded from stars; daily shows only weighted categories (P-M1, P-M2, D14)
+- [x] R-a Split data from code: `KINLY_DATA_ROOT` (data/, reports/, resources/) → `~/Projects/kinly-data` locally, `/data/repo` on Railway; `KINLY_DATA_REPO=angellog/kinly-data`; `publish` refuses the `gh` token without `--use-gh-token` (R1, D5)
+- [x] R-b Export never writes `readme_excerpt`; larsbijl snapshots ship its MIT notice; vitalets stays local (R6)
+- [x] R-c Ingest sanitizer: strip HTML/control chars, cap lengths; test with `<img onerror>` + injected instruction (R2, D15)
+- [x] R-d Picks: suppress starred / shortlisted / picked-in-30-days, relevance ≥ 50 and score ≥ 45, novelty term, WIP limit 5; category weights seeded from stars; daily shows only weighted categories (P-M1, P-M2, D14)
 - [ ] R-e Stargazers history (`/repos/{o}/{r}/stargazers/history`) for today's lists + landscape top 50; velocity from it, snapshot-diff fallback (D13)
-- [ ] R-f Stall detection in collect + persistence per source + coverage stated in the landscape header (E-M4b, P-M3)
-- [ ] R-g Reports print `enriched N of M` with a degraded banner < 50%, plus credential states in the footer (E-B1, R8)
-- [ ] R-h Rename handling: canonical `nameWithOwner` from enrichment re-points history in one transaction (E-m1)
-- [ ] R-i Ratings split owner/agent; only owner rating moves status to `rated`; resource page has the test-log section (P-M5, D16)
-- [ ] R-j Language list capped at 10 + all, with a test; backoff on 429/5xx (R7)
+- [x] R-f Stall detection in collect + persistence per source + coverage stated in the landscape header (E-M4b, P-M3)
+- [x] R-g Reports print `enriched N of M` with a degraded banner < 50%, plus credential states in the footer (E-B1, R8)
+- [x] R-h Rename handling: canonical `nameWithOwner` from enrichment re-points history in one transaction (E-m1)
+- [x] R-i Ratings split owner/agent; only owner rating moves status to `rated`; resource page has the test-log section (P-M5, D16)
+- [x] R-j Language list capped at 10 + all, with a test; backoff on 429/5xx (R7)
 
 ## G. Verification and hand-off
 - [ ] G1 Final code-review workflow (correctness + security + cost lenses) and findings fixed
