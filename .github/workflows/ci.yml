@@ -39,6 +39,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # The engine's compiled types are what the server and plugin import, so build first.
+      - run: npm run build
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build

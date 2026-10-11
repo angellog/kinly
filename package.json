@@ -2,17 +2,23 @@
   "name": "kinly",
   "version": "0.1.0",
   "private": true,
-  "description": "Project Kinly by Vantik Systems — GitHub trend intelligence: what is trending, what trended, what it does, and how to use it in the business.",
+  "description": "Project Kinly by Vantik Systems \u2014 GitHub trend intelligence: what is trending, what trended, what it does, and how to use it in the business.",
   "license": "MIT",
   "author": "Vantik Systems",
   "type": "module",
-  "engines": { "node": ">=24" },
-  "workspaces": ["packages/engine", "packages/server", "packages/paperclip-plugin"],
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "packages/engine",
+    "packages/server",
+    "packages/paperclip-plugin"
+  ],
   "scripts": {
     "build": "npm run build -w packages/engine && npm run build -w packages/server && npm run build -w packages/paperclip-plugin",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run build -w packages/engine && npm run typecheck --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
-    "check": "npm run typecheck && npm test && npm run build",
+    "check": "npm run build && npm run typecheck && npm test",
     "kinly": "node packages/engine/dist/src/cli.js",
     "serve": "node packages/server/dist/main.js"
   }
