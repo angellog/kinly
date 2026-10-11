@@ -38,11 +38,11 @@ Loop rule: every item below must be ticked `[x]` before the loop stops. An item 
 - [ ] D7 Deployed service answers `/api/health` and `/api/trending?window=today` with real rows
 
 ## E. Paperclip plugin (`packages/paperclip-plugin`, id `vantik.kinly`)
-- [ ] E1 Manifest (capabilities, config schema, tools, jobs, managed agent, managed skill, UI slots) validated against the host schema
+- [x] E1 Manifest (capabilities, config schema, tools, jobs, managed agent, managed skill, UI slots) validated against the host schema
 - [ ] E2 Worker: data handlers, actions, 8 agent tools, daily-brief job, managed agent/skill reconcile for every enabled company
 - [ ] E3 UI: page with 8 tabs, sidebar link, dashboard widget, Vantik Signal styling, real decision buttons
-- [ ] E4 `AGENTS.md` for the Kinly agent (persona, tool usage, clone → test → rate → resource protocol)
-- [ ] E5 Tests (config, tool handlers against a fake API, brief idempotency); `npm run check` green
+- [x] E4 `AGENTS.md` for the Kinly agent (persona, tool usage, clone → test → rate → resource protocol)
+- [x] E5 Tests (config, tool handlers against a fake API, brief idempotency); `npm run check` green
 - [ ] E6 Installed on this instance (`paperclipai plugin install`), config set for all four companies, page renders at `/VAN/kinly`
 
 ## F. Public repo and docs
