@@ -2,18 +2,21 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import path from "node:path";
 import { classifyRepo } from "./classify/rules.js";
 import type { KinlyConfig } from "./config.js";
-import { GitHubClient } from "./github/client.js";
+import { GitHubClient, GitHubHttpError, RateLimitExhausted } from "./github/client.js";
+import { fetchStarHistory, STAR_HISTORY_PAGE } from "./github/star-history.js";
 import { enrichRepos } from "./github/enrich.js";
 import { publishFiles, type PublishFile } from "./github/publish.js";
 import { heuristicSummary, Llm } from "./llm/anthropic.js";
-import { dailyReport } from "./reports/daily.js";
+import { dailyReport, dailySelection } from "./reports/daily.js";
+import type { RunHealth } from "./reports/markdown.js";
 import { landscapeReport } from "./reports/landscape.js";
 import { resourceFileName, resourcePage } from "./reports/resource.js";
-import { weeklyReport } from "./reports/weekly.js";
+import { weeklyReport, weeklySelection } from "./reports/weekly.js";
 import { buildProfile } from "./score/profile.js";
 import { fetchLarsbijlDay } from "./sources/larsbijl-archive.js";
 import { fetchNewHighGrowth } from "./sources/gh-search.js";
 import { listSnapshotFiles, readSnapshotFile, writeSnapshotFile } from "./sources/snapshot-files.js";
+import { detectStalls, listKey } from "./sources/stall.js";
 import { fetchUserStars, readStarsFile, type UserStar } from "./sources/stars.js";
 import { fetchAllTrending } from "./sources/trending-page.js";
 import { fetchVitaletsComments, parseVitaletsComment } from "./sources/vitalets-archive.js";
@@ -21,7 +24,7 @@ import type { Store } from "./store/store.js";
 import type { Profile, RepoRecord, Snapshot } from "./types.js";
 import { addDays, dateRange, isoDate, isoNow, isoWeek } from "./util/dates.js";
 import { isFullName } from "./util/text.js";
-import { rescoreAll, repoView } from "./views.js";
+import { rankedList, rescoreAll, repoView } from "./views.js";
 
 /**
  * The jobs: every unit of work the CLI, the scheduler and the API can run.
@@ -37,13 +40,15 @@ export interface JobContext {
   llm: Llm;
   log: Logger;
   fetchImpl?: typeof fetch;
+  /** Pause between trending page fetches; tests set 0. */
+  scrapeDelayMs?: number;
 }
 
-export function makeContext(store: Store, config: KinlyConfig, options: { log?: Logger; fetchImpl?: typeof fetch; llm?: Llm; github?: GitHubClient } = {}): JobContext {
+export function makeContext(store: Store, config: KinlyConfig, options: { log?: Logger; fetchImpl?: typeof fetch; llm?: Llm; github?: GitHubClient; scrapeDelayMs?: number } = {}): JobContext {
   const log = options.log ?? ((m: string) => console.error(`[kinly] ${m}`));
   const github = options.github ?? new GitHubClient({ token: config.githubToken, log, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) });
   const llm = options.llm ?? new Llm({ apiKey: config.anthropicKey, model: config.llmModel, dailyCapTokens: config.llmDailyCap, store, log });
-  return { store, config, github, llm, log, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) };
+  return { store, config, github, llm, log, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}), ...(options.scrapeDelayMs !== undefined ? { scrapeDelayMs: options.scrapeDelayMs } : {}) };
 }
 
 async function recorded<T extends Record<string, unknown>>(ctx: JobContext, job: string, fn: () => Promise<T>): Promise<T> {
@@ -74,8 +79,16 @@ export function loadProfile(ctx: JobContext): Profile {
       // rebuild below
     }
   }
-  const stars = ctx.store.userStars().map((s) => ({ full_name: s.full_name, starred_at: s.starred_at, topics: ctx.store.getRepo(s.full_name)?.topics ?? [] }));
-  const profile = buildProfile(stars);
+  const starsFile = path.join(ctx.config.dataDir, "raw", "stars.json");
+  const exported = existsSync(starsFile) ? readStarsFile(starsFile) : [];
+  const stars: UserStar[] = exported.length
+    ? exported
+    : ctx.store.userStars().map((s) => {
+        const r = ctx.store.getRepo(s.full_name);
+        return { full_name: s.full_name, starred_at: s.starred_at, description: r?.description ?? null, language: r?.language ?? null, topics: r?.topics ?? [] };
+      });
+  const categories = stars.map((s) => classifyRepo({ full_name: s.full_name, description: s.description ?? null, topics: s.topics ?? [], readme_excerpt: null, language: s.language ?? null }).category);
+  const profile = buildProfile(stars, {}, categories);
   saveProfile(ctx, profile);
   return profile;
 }
@@ -135,9 +148,14 @@ export async function syncStars(ctx: JobContext, options: { fromFile?: boolean }
 export async function collectLive(ctx: JobContext, options: { date?: string; search?: boolean } = {}): Promise<Record<string, unknown>> {
   return recorded(ctx, "collect", async () => {
     const date = options.date ?? isoDate();
-    const { snapshots, failures } = await fetchAllTrending({ listDate: date, ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}) });
+    const { snapshots, failures } = await fetchAllTrending({ listDate: date, ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}), ...(ctx.scrapeDelayMs !== undefined ? { delayMs: ctx.scrapeDelayMs, retries: 0 } : {}) });
+    const yesterdayFile = listSnapshotFiles(ctx.config.dataDir, "trending-page").find((f) => f.date === addDays(date, -1));
+    const stalled = detectStalls(snapshots, yesterdayFile ? (readSnapshotFile(yesterdayFile.file)?.lists ?? []) : []);
+    ctx.store.setMeta(`stalled_${date}`, JSON.stringify(stalled));
+    if (stalled.length) ctx.log(`collect: stalled lists (identical to yesterday): ${stalled.join(", ")}`);
     let inserted = 0;
-    for (const s of snapshots) inserted += ctx.store.ingestSnapshot(s).inserted;
+    // A stalled list is archived as observed but earns no appearances.
+    for (const s of snapshots) if (!stalled.includes(listKey(s))) inserted += ctx.store.ingestSnapshot(s).inserted;
     if (snapshots.length > 0) {
       writeSnapshotFile(ctx.config.dataDir, "trending-page", date, snapshots);
       ctx.store.markSnapshotImported("trending-page", date);
@@ -156,7 +174,8 @@ export async function collectLive(ctx: JobContext, options: { date?: string; sea
     }
     for (const f of failures) ctx.log(`collect: ${f.window}/${f.language} failed: ${f.error}`);
     ctx.log(`collect ${date}: ${snapshots.length} lists, ${inserted} new appearances, ${searchEntries} search rows, ${failures.length} failures`);
-    return { date, lists: snapshots.length, inserted, searchEntries, failures: failures.map((f) => `${f.window}/${f.language}: ${f.error}`) };
+    if (snapshots.length === 0) throw new Error(`collect ${date}: every trending list failed (${failures.map((f) => `${f.window}/${f.language}: ${f.error}`).join("; ")})`);
+    return { date, lists: snapshots.length, inserted, stalled, searchEntries, failures: failures.map((f) => `${f.window}/${f.language}: ${f.error}`) };
   });
 }
 
@@ -250,6 +269,7 @@ export async function enrichPending(ctx: JobContext, options: { limit?: number; 
     const names = options.names ?? ctx.store.namesNeedingEnrichment(staleBefore, options.limit ?? (ctx.github.authenticated ? 400 : 25));
     if (names.length === 0) return { enriched: 0, missing: 0, skipped: 0, errors: 0 };
     const res = await enrichRepos(ctx.github, names, { log: ctx.log });
+    for (const r of res.renamed) ctx.store.renameRepo(r.from, r.to);
     ctx.store.transaction(() => {
       for (const meta of res.found) {
         ctx.store.upsertRepoMeta(meta);
@@ -261,8 +281,53 @@ export async function enrichPending(ctx: JobContext, options: { limit?: number; 
       }
       for (const n of res.missing) ctx.store.markRepoGone(n);
     });
-    ctx.log(`enrich: ${res.found.length} enriched, ${res.missing.length} missing, ${res.skipped.length} skipped (budget), ${res.errors.length} errors`);
-    return { enriched: res.found.length, missing: res.missing.length, skipped: res.skipped.length, errors: res.errors.length, errorDetail: res.errors.slice(0, 5) };
+    ctx.log(`enrich: ${res.found.length} enriched, ${res.renamed.length} renamed, ${res.missing.length} missing, ${res.skipped.length} skipped (budget), ${res.errors.length} errors`);
+    return { enriched: res.found.length, renamed: res.renamed.length, missing: res.missing.length, skipped: res.skipped.length, errors: res.errors.length, errorDetail: res.errors.slice(0, 5) };
+  });
+}
+
+/**
+ * Stargazers history (D13) for the given repos, skipping any fetched within
+ * `maxAgeHours`. Bounded by the rate budget: keyless runs fetch what the
+ * hour allows and leave the rest for the next run.
+ */
+export async function fetchStarHistories(ctx: JobContext, names: readonly string[], options: { weeks?: number; maxAgeHours?: number } = {}): Promise<Record<string, unknown>> {
+  return recorded(ctx, "star-history", async () => {
+    const weeks = options.weeks ?? 2;
+    const cutoff = Date.now() - (options.maxAgeHours ?? 20) * 3_600_000;
+    let fetched = 0;
+    let fresh = 0;
+    let gone = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+    for (const name of new Set(names)) {
+      const at = ctx.store.starWeeksFetchedAt(name);
+      if (at && Date.parse(at) >= cutoff) {
+        fresh++;
+        continue;
+      }
+      const pages = Math.ceil(weeks / STAR_HISTORY_PAGE);
+      if (ctx.github.budget() < pages) {
+        skipped++;
+        continue;
+      }
+      try {
+        const hist = await fetchStarHistory(ctx.github, name, weeks);
+        if (hist === null) gone++;
+        else {
+          ctx.store.saveStarWeeks(name, hist);
+          fetched++;
+        }
+      } catch (err) {
+        if (err instanceof RateLimitExhausted) {
+          skipped++;
+          break;
+        }
+        errors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    ctx.log(`star-history: ${fetched} fetched, ${fresh} fresh, ${gone} gone, ${skipped} skipped (budget), ${errors.length} errors`);
+    return { fetched, fresh, gone, skipped, errors: errors.length, errorDetail: errors.slice(0, 5) };
   });
 }
 
@@ -320,8 +385,36 @@ export function scoreAll(ctx: JobContext, profile: Profile): { scored: number } 
 
 // ─── reports ─────────────────────────────────────────────────────────────────
 
-export function writeDaily(ctx: JobContext, profile: Profile, date: string, sources: string[] = []): { id: string; file: string } {
-  const md = dailyReport(ctx.store, profile, { date, sources });
+/** Credential state per service, for /api/status and report footers (R8). Cheap: /rate_limit does not count against the limit. */
+export async function credentialStates(ctx: JobContext): Promise<Record<"github" | "anthropic", "present" | "absent" | "rejected">> {
+  let github: "present" | "absent" | "rejected" = "absent";
+  if (ctx.github.authenticated) {
+    try {
+      await ctx.github.rateLimit();
+      github = "present";
+    } catch (err) {
+      github = err instanceof GitHubHttpError && (err.status === 401 || err.status === 403) ? "rejected" : "present";
+    }
+  }
+  let anthropic: "present" | "absent" | "rejected" = ctx.llm.available ? "present" : "absent";
+  const authErr = ctx.store.getMeta("llm_auth_error_at");
+  if (anthropic === "present" && authErr && authErr.slice(0, 10) === isoDate()) anthropic = "rejected";
+  return { github, anthropic };
+}
+
+function runHealth(ctx: JobContext, date: string, credentials?: Record<string, string>): RunHealth {
+  let stalled: string[] = [];
+  try {
+    stalled = JSON.parse(ctx.store.getMeta(`stalled_${date}`) ?? "[]") as string[];
+  } catch {
+    stalled = [];
+  }
+  return { stalled, ...(credentials ? { credentials } : {}) };
+}
+
+export function writeDaily(ctx: JobContext, profile: Profile, date: string, sources: string[] = [], credentials?: Record<string, string>): { id: string; file: string } {
+  const md = dailyReport(ctx.store, profile, { date, sources, health: runHealth(ctx, date, credentials) });
+  ctx.store.recordPicks("daily", date, dailySelection(ctx.store, profile, date).selection.picks.map((v) => v.repo.full_name));
   ctx.store.saveReport("daily", date, md);
   const file = path.join(ctx.config.reportsDir, "daily", `${date}.md`);
   mkdirSync(path.dirname(file), { recursive: true });
@@ -329,9 +422,11 @@ export function writeDaily(ctx: JobContext, profile: Profile, date: string, sour
   return { id: date, file };
 }
 
-export function writeWeekly(ctx: JobContext, profile: Profile, date: string, sources: string[] = []): { id: string; file: string } {
+export function writeWeekly(ctx: JobContext, profile: Profile, date: string, sources: string[] = [], credentials?: Record<string, string>): { id: string; file: string } {
   const id = isoWeek(date);
-  const md = weeklyReport(ctx.store, profile, { date, sources });
+  const md = weeklyReport(ctx.store, profile, { date, sources, health: runHealth(ctx, date, credentials) });
+  const weekList = rankedList(ctx.store, "week", profile, { date, limit: 120, candidates: 300 });
+  ctx.store.recordPicks("weekly", date, weeklySelection(ctx.store, weekList, date).picks.map((v) => v.repo.full_name));
   ctx.store.saveReport("weekly", id, md);
   const file = path.join(ctx.config.reportsDir, "weekly", `${id}.md`);
   mkdirSync(path.dirname(file), { recursive: true });
@@ -457,6 +552,9 @@ export async function fetchDataFromRepo(ctx: JobContext, options: { fetchImpl?: 
   return { files };
 }
 
+/** Sources whose rows Kinly may read but has no licence to republish (R6): never published, never in the manifest. */
+const LOCAL_ONLY_SOURCES = new Set(["vitalets-archive"]);
+
 /** Write data/manifest.json: every file under data/ that the server should mirror on boot. */
 export function writeDataManifest(ctx: JobContext): { files: number } {
   const root = ctx.config.dataRoot;
@@ -466,7 +564,7 @@ export function writeDataManifest(ctx: JobContext): { files: number } {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (entry.isFile() && entry.name.endsWith(".json") && entry.name !== "manifest.json" && !entry.name.endsWith(".db")) files.push(path.relative(root, full).split(path.sep).join("/"));
+      else if (entry.isFile() && entry.name.endsWith(".json") && entry.name !== "manifest.json" && ![...LOCAL_ONLY_SOURCES].some((src) => full.includes(`${path.sep}${src}${path.sep}`))) files.push(path.relative(root, full).split(path.sep).join("/"));
     }
   };
   walk(dataDir);
@@ -510,7 +608,7 @@ function defaultPublishPaths(ctx: JobContext): string[] {
   add(path.join(ctx.config.reportsDir, "daily", `${today}.md`));
   add(path.join(ctx.config.reportsDir, "daily", `${addDays(today, -1)}.md`));
   add(path.join(ctx.config.reportsDir, "weekly", `${isoWeek(today)}.md`));
-  for (const f of listSnapshotFiles(ctx.config.dataDir)) if (f.date >= addDays(today, -3)) add(f.file);
+  for (const f of listSnapshotFiles(ctx.config.dataDir)) if (f.date >= addDays(today, -3) && !LOCAL_ONLY_SOURCES.has(f.source)) add(f.file);
   add(path.join(ctx.config.dataDir, "user", "shortlist.json"));
   add(path.join(ctx.config.dataDir, "user", "ratings.json"));
   add(path.join(ctx.config.dataDir, "user", "profile.json"));
@@ -525,31 +623,54 @@ function defaultPublishPaths(ctx: JobContext): string[] {
 
 // ─── the daily pipeline ─────────────────────────────────────────────────────
 
-export async function runDaily(ctx: JobContext, options: { date?: string; publish?: boolean; weekly?: boolean } = {}): Promise<Record<string, unknown>> {
+/**
+ * The daily pipeline (D12): stars → collect → enrich → classify/summarize/score
+ * → reports → export → publish, in order. Each stage records its own `runs`
+ * row (the job functions do that); the first stage that throws stops the
+ * pipeline, so a failed collect never produces a public report. Stars and
+ * publish are best-effort: a missing token must not block the report.
+ * `meta.last_daily_ok` is the date the whole pipeline last finished, which is
+ * what the scheduler's catch-up checks.
+ */
+export async function runDaily(ctx: JobContext, options: { date?: string; publish?: boolean; weekly?: boolean; allowGhToken?: boolean } = {}): Promise<Record<string, unknown>> {
   const date = options.date ?? isoDate();
   const out: Record<string, unknown> = { date };
   const sources: string[] = [];
-  const collect = await collectLive(ctx, { date });
-  out["collect"] = collect;
-  if ((collect["lists"] as number) > 0) sources.push("trending-page");
-  if ((collect["searchEntries"] as number) > 0) sources.push("gh-search-new");
+  const credentials = await credentialStates(ctx);
+  out["credentials"] = credentials;
   if (ctx.github.authenticated) {
     try {
       out["stars"] = await syncStars(ctx);
     } catch (err) {
-      ctx.log(`stars: ${err instanceof Error ? err.message : String(err)}`);
+      ctx.log(`stars (non-blocking): ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+  const collect = await collectLive(ctx, { date });
+  out["collect"] = collect;
+  if ((collect["lists"] as number) > 0) sources.push("trending-page");
+  if ((collect["searchEntries"] as number) > 0) sources.push("gh-search-new");
   out["enrich"] = await enrichPending(ctx, {});
+  const listed = [...ctx.store.list("today", { date, limit: 150 }), ...ctx.store.list("week", { date, limit: 100 })].map((r) => r.full_name);
+  out["starHistory"] = await fetchStarHistories(ctx, listed, { weeks: 2 });
   const profile = loadProfile(ctx);
-  out["classify"] = classifyAll(ctx, { onlyUnclassified: true });
+  out["classify"] = await recorded(ctx, "classify", async () => classifyAll(ctx, { onlyUnclassified: true }));
   out["summarize"] = await summarizePending(ctx, profile, { since: addDays(date, -14) });
-  out["score"] = scoreAll(ctx, profile);
-  out["daily"] = writeDaily(ctx, profile, date, sources);
+  out["score"] = await recorded(ctx, "score", async () => scoreAll(ctx, profile));
+  out["daily"] = await recorded(ctx, "report-daily", async () => writeDaily(ctx, profile, date, sources, credentials));
   const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
-  if (options.weekly ?? dow === 1) out["weekly"] = writeWeekly(ctx, profile, date, sources);
-  out["export"] = exportData(ctx);
-  out["manifest"] = writeDataManifest(ctx);
-  if (options.publish ?? true) out["publish"] = await publishToRepo(ctx, { message: `kinly: daily ${date}` });
+  if (options.weekly ?? dow === 1) {
+    out["weekly"] = await recorded(ctx, "report-weekly", async () => writeWeekly(ctx, profile, date, sources, credentials));
+    ctx.store.setMeta("last_weekly_ok", isoWeek(date));
+  }
+  out["export"] = await recorded(ctx, "export", async () => ({ ...exportData(ctx), manifest: writeDataManifest(ctx) }));
+  ctx.store.setMeta("last_daily_ok", date);
+  if (options.publish ?? true) {
+    try {
+      out["publish"] = await recorded(ctx, "publish", () => publishToRepo(ctx, { message: `kinly: daily ${date}`, ...(options.allowGhToken ? { allowGhToken: true } : {}) }));
+    } catch (err) {
+      // The report exists locally and in the DB; a failed push is retried by the next run.
+      out["publish"] = { committed: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
   return out;
 }

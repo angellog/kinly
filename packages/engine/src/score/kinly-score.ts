@@ -14,7 +14,8 @@ export function adoptionScore(repo: RepoRecord, signals: TrendSignals): { score:
   const stars = Math.max(0, repo.stars ?? 0);
   // log10: 100 stars -> 2, 10k -> 4, 100k -> 5. Map 2..5.5 onto 0..20.
   const starPart = clamp(((Math.log10(stars + 1) - 2) / 3.5) * 20, 0, 20);
-  const velocity = signals.velocity_7d ?? (signals.peak_stars_period !== null ? signals.peak_stars_period / 1 : 0);
+  // Without a 7-day measure, the best day on a daily list is the only per-day figure there is.
+  const velocity = signals.velocity_7d ?? signals.peak_stars_period ?? 0;
   // 50 stars/day -> ~5, 500/day -> ~10
   const velocityPart = clamp((Math.log10(Math.max(0, velocity) + 1) / 3) * 10, 0, 10);
   const reason = `${stars.toLocaleString("en-US")} stars` + (velocity > 0 ? `, ~${Math.round(velocity).toLocaleString("en-US")}/day` : "");

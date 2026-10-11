@@ -3,8 +3,8 @@ import type { Profile } from "../types.js";
 import { CATEGORY_LABELS } from "../classify/rules.js";
 import { addDays, isoNow, isoWeek, weekStart } from "../util/dates.js";
 import { fmtInt } from "../util/text.js";
-import { perCategory, rankedList, repoView } from "../views.js";
-import { businessUse, categoryLabel, footer, h1, licenseLabel, oneLiner, pickBlock, rankedTable, repoLink, table, verdictBadge } from "./markdown.js";
+import { perCategory, rankedList, repoView, selectPicks, type PickResult, type RankedView } from "../views.js";
+import { businessUse, categoryLabel, coverageNote, footer, h1, type RunHealth, licenseLabel, oneLiner, pickBlock, rankedTable, repoLink, table, verdictBadge } from "./markdown.js";
 
 export interface WeeklyReportOptions {
   /** Any date inside the week; the report covers Monday..that date. */
@@ -14,6 +14,12 @@ export interface WeeklyReportOptions {
   picks?: number;
   generatedAt?: string;
   sources?: readonly string[];
+  health?: RunHealth;
+}
+
+/** "Add to a workspace this week": stricter than the daily picks, and held back only against earlier weekly picks. */
+export function weeklySelection(store: Store, weekList: readonly RankedView[], date: string, picksN = 5): PickResult {
+  return selectPicks(store, weekList, { date, n: picksN, minRelevance: 60, minScore: 55, kind: "weekly" });
 }
 
 export function weeklyReport(store: Store, profile: Profile | null, options: WeeklyReportOptions): string {
@@ -30,17 +36,15 @@ export function weeklyReport(store: Store, profile: Profile | null, options: Wee
   const byCat = perCategory(weekList, perCat);
   const rising = rankedList(store, "rising", profile, { date, limit: 10 });
   const persistent = rankedList(store, "persistent", profile, { date, limit: 15 });
-  const picks = [...weekList]
-    .filter((v) => v.score.verdict === "BUILD" || (v.score.verdict === "WATCH" && v.relevance >= 60))
-    .filter((v) => !v.shortlist || v.shortlist.status === "discovered")
-    .sort((a, b) => b.relevance * 0.6 + b.score.total * 0.4 - (a.relevance * 0.6 + a.score.total * 0.4))
-    .slice(0, picksN);
+  const selection = weeklySelection(store, weekList, date, picksN);
+  const picks = selection.picks;
   const resources = store.listResources().filter((r) => r.generated_at >= `${from}T00:00:00Z`);
   const ratings = store.listRatings().filter((r) => r.updated_at >= `${from}T00:00:00Z`);
 
   const parts: string[] = [];
   parts.push(h1(`Kinly Weekly — ${week}`, `Covers ${from} to ${date}. ${weekList.length} repositories touched the lists this week.`));
 
+  parts.push(coverageNote(weekList));
   parts.push(`## Top ${top.length} of the week\n`);
   parts.push(rankedTable(top, { metricHeader: "This week" }));
 
@@ -48,7 +52,7 @@ export function weeklyReport(store: Store, profile: Profile | null, options: Wee
   if (picks.length === 0) parts.push("_No new BUILD-grade repos this week. Keep testing what is already on the shortlist._\n");
   picks.forEach((v, i) => {
     parts.push(pickBlock(v, i + 1));
-    parts.push(`**15-minute test plan.** \`git clone https://github.com/${v.repo.full_name}\` into a scratch workspace, read the README's quick start, run the one-line install or the Docker image if there is one, and try it on a real artefact from the business (a carousel brief, an Instagram caption, a sneaker photo, a client question). Rate it 1–5 in Kinly and say in one line what it replaced or enabled.\n`);
+    parts.push(`**15-minute test plan.** In a throwaway container, never on the Mac's home directory: \`docker run --rm -it node:24 bash\`, then \`git clone --depth 1 https://github.com/${v.repo.full_name}\` and install with lifecycle scripts off (\`npm install --ignore-scripts\` / \`pip install --no-deps\`); read any install script before re-enabling it. Follow the README's quick start, try it on a real artefact from the business (a carousel brief, an Instagram caption, a sneaker photo, a client question), and log what you ran on its resource page. Rate it 1–5 in Kinly and say in one line what it replaced or enabled.\n`);
   });
 
   parts.push(`\n## By category (top ${perCat})\n`);
@@ -105,7 +109,7 @@ export function weeklyReport(store: Store, profile: Profile | null, options: Wee
     );
   }
 
-  parts.push(footer(generatedAt, options.sources ?? []));
+  parts.push(footer(generatedAt, options.sources ?? [], options.health ?? {}));
   return parts.join("\n");
 }
 

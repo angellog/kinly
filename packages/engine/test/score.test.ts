@@ -6,7 +6,7 @@ import type { TrendSignals } from "../src/types.js";
 import { NOW, repo } from "./helpers.js";
 
 function signals(over: Partial<TrendSignals> = {}): TrendSignals {
-  return { full_name: "a/b", appearances: 0, distinct_days: 0, distinct_weeks: 0, first_seen: null, last_seen: null, peak_stars_period: null, velocity_7d: null, sources: [], ...over };
+  return { full_name: "a/b", appearances: 0, distinct_days: 0, distinct_weeks: 0, first_seen: null, last_seen: null, peak_stars_period: null, velocity_7d: null, stars_7d: null, peak_week_stars: null, sources: [], ...over };
 }
 
 describe("kinly score", () => {

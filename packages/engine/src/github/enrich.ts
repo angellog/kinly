@@ -23,6 +23,8 @@ export interface EnrichResult {
   /** Names skipped because the rate budget ran out. */
   skipped: string[];
   errors: Array<{ full_name: string; error: string }>;
+  /** Requested name → GitHub's current name, when they differ (rename or transfer). */
+  renamed: Array<{ from: string; to: string }>;
 }
 
 interface GqlRepo {
@@ -177,7 +179,7 @@ async function enrichOneRest(client: GitHubClient, fullName: string): Promise<Re
 
 export async function enrichRepos(client: GitHubClient, names: readonly string[], options: { log?: (m: string) => void } = {}): Promise<EnrichResult> {
   const log = options.log ?? (() => undefined);
-  const result: EnrichResult = { found: [], missing: [], skipped: [], errors: [] };
+  const result: EnrichResult = { found: [], missing: [], skipped: [], errors: [], renamed: [] };
   const unique = [...new Set(names)];
   if (client.authenticated) {
     for (let i = 0; i < unique.length; i += GRAPHQL_BATCH) {
@@ -190,7 +192,10 @@ export async function enrichRepos(client: GitHubClient, names: readonly string[]
         const data = await client.graphql<Record<string, GqlRepo | null>>(buildQuery(batch));
         batch.forEach((n, j) => {
           const r = data[aliasFor(j)];
-          if (r) result.found.push(fromGql(r, n));
+          if (r) {
+            result.found.push(fromGql(r, n));
+            if (r.nameWithOwner && r.nameWithOwner !== n) result.renamed.push({ from: n, to: r.nameWithOwner });
+          }
           else result.missing.push(n);
         });
         log(`enriched ${Math.min(i + GRAPHQL_BATCH, unique.length)}/${unique.length} (graphql)`);
@@ -203,8 +208,10 @@ export async function enrichRepos(client: GitHubClient, names: readonly string[]
         for (const n of batch) {
           try {
             const meta = await enrichOneRest(client, n);
-            if (meta) result.found.push(meta);
-            else result.missing.push(n);
+            if (meta) {
+              result.found.push(meta);
+              if (meta.full_name !== n) result.renamed.push({ from: n, to: meta.full_name });
+            } else result.missing.push(n);
           } catch (e2) {
             if (e2 instanceof RateLimitExhausted) {
               result.skipped.push(n);
@@ -224,8 +231,10 @@ export async function enrichRepos(client: GitHubClient, names: readonly string[]
     }
     try {
       const meta = await enrichOneRest(client, n);
-      if (meta) result.found.push(meta);
-      else result.missing.push(n);
+      if (meta) {
+        result.found.push(meta);
+        if (meta.full_name !== n) result.renamed.push({ from: n, to: meta.full_name });
+      } else result.missing.push(n);
     } catch (err) {
       if (err instanceof RateLimitExhausted) {
         result.skipped.push(n);

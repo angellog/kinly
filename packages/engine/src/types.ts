@@ -142,9 +142,14 @@ export interface TrendSignals {
   distinct_weeks: number;
   first_seen: string | null;
   last_seen: string | null;
+  /** Most stars gained in one day on a daily list ("N stars today"). */
   peak_stars_period: number | null;
-  /** Stars per day over the last 7 observed days, null when fewer than 2 observations. */
+  /** Stars per day over the last 7 days: from stargazers history when fresh, else from star-count snapshots; null without data. */
   velocity_7d: number | null;
+  /** Stars created in the last 7 days per stargazers history (D13), null when not fetched. */
+  stars_7d: number | null;
+  /** The biggest week on record per stargazers history, null when not fetched. */
+  peak_week_stars: number | null;
   sources: SourceId[];
 }
 
@@ -186,6 +191,24 @@ export interface Rating {
   updated_at: string;
 }
 
+/** The Kinly agent's own test result. Kept apart from the owner's rating: only the owner moves a repo to `rated` (P-M5). */
+export interface AgentRating {
+  full_name: string;
+  rating: number;
+  notes: string | null;
+  /** What was run, in which container, and what happened. Shown on the resource page. */
+  test_log: string | null;
+  agent: string | null;
+  updated_at: string;
+}
+
+/** One week of the stargazers/history endpoint: stars created per day, Sunday first (D13). */
+export interface StarWeek {
+  week_start: string;
+  total: number;
+  days: number[];
+}
+
 /** A repo as the API and the reports present it: record + signals + score + owner state. */
 export interface RepoView {
   repo: RepoRecord;
@@ -194,6 +217,7 @@ export interface RepoView {
   relevance: number;
   shortlist: ShortlistEntry | null;
   rating: Rating | null;
+  agent_rating: AgentRating | null;
   /** True when the owner has starred it. */
   starred: boolean;
 }

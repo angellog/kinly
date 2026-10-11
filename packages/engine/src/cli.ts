@@ -17,6 +17,7 @@ import { rankedList, repoView } from "./views.js";
  *   kinly export                             write data/repos/*.json, data/user/*.json, data/index.json, data/manifest.json
  *   kinly stars [--file]                     sync the owner's stars and rebuild the profile
  *   kinly enrich [--limit N] [--stale-days N] [--names a/b,c/d]
+ *   kinly star-history [--names a/b,c/d | --top N] [--weeks W]   stargazers history (default: top 50 persistent, 78 weeks)
  *   kinly classify [--all]
  *   kinly summarize [--limit N] [--since D] [--heuristic]
  *   kinly score
@@ -127,6 +128,14 @@ async function main(argv: string[]): Promise<number> {
       case "enrich": {
         const names = flagStr(flags, "names")?.split(",").map((s) => s.trim()).filter(isFullName);
         print(await jobs.enrichPending(ctx, { ...(flagInt(flags, "limit") !== undefined ? { limit: flagInt(flags, "limit") as number } : {}), ...(flagInt(flags, "stale-days") !== undefined ? { staleDays: flagInt(flags, "stale-days") as number } : {}), ...(names && names.length ? { names } : {}) }));
+        return 0;
+      }
+      case "star-history": {
+        // --names a/b,c/d  or  --top N (persistent leaders over the backfill window)  [--weeks W]
+        const weeks = flagInt(flags, "weeks") ?? 78;
+        let names = flagStr(flags, "names")?.split(",").map((s) => s.trim()).filter(isFullName) ?? [];
+        if (names.length === 0) names = store.list("persistent", { limit: flagInt(flags, "top") ?? 50, since: dateFlag(flags, "since", addDays(isoDate(), -548)) }).map((r) => r.full_name);
+        print(await jobs.fetchStarHistories(ctx, names, { weeks, maxAgeHours: flagInt(flags, "max-age-hours") ?? 20 }));
         return 0;
       }
       case "classify": {

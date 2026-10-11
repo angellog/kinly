@@ -25,7 +25,7 @@ export function resourcePage(v: RepoView, options: { generatedAt?: string; quick
   lines.push(`| Kinly score | **${v.score.total}/100** — ${v.score.reasons.join(" · ")} |`);
   lines.push(`| Verdict | **${verdictBadge(v)}** |`);
   lines.push(`| Relevance | ${v.relevance}/100 |`);
-  lines.push(`| Trending history | ${v.signals.distinct_days} day(s), ${v.signals.distinct_weeks} week(s); first ${v.signals.first_seen ?? "—"}, last ${v.signals.last_seen ?? "—"}; peak ${v.signals.peak_stars_period !== null ? `${fmtInt(v.signals.peak_stars_period)} stars in a period` : "—"} |`);
+  lines.push(`| Trending history | ${v.signals.distinct_days} day(s), ${v.signals.distinct_weeks} week(s); first ${v.signals.first_seen ?? "—"}, last ${v.signals.last_seen ?? "—"}; best day ${v.signals.peak_stars_period !== null ? `${fmtInt(v.signals.peak_stars_period)} stars` : "—"}${v.signals.peak_week_stars !== null ? `; best week ${fmtInt(v.signals.peak_week_stars)} stars` : ""}${v.signals.stars_7d !== null ? `; last 7 days ${fmtInt(v.signals.stars_7d)} stars` : ""} |`);
   if (r.topics.length) lines.push(`| Topics | ${r.topics.map((t) => `\`${t}\``).join(" ")} |`);
   lines.push("");
   lines.push(`## What it is`);
@@ -38,7 +38,7 @@ export function resourcePage(v: RepoView, options: { generatedAt?: string; quick
     v.signals.distinct_weeks >= 3
       ? `It returned to the trending lists across ${v.signals.distinct_weeks} distinct weeks between ${v.signals.first_seen} and ${v.signals.last_seen}, which puts it in the persistent tier rather than a one-day spike.`
       : v.signals.appearances > 0
-        ? `It appeared on ${v.signals.appearances} trending list(s) between ${v.signals.first_seen} and ${v.signals.last_seen}${v.signals.peak_stars_period ? `, peaking at ${fmtInt(v.signals.peak_stars_period)} stars in a single period` : ""}.`
+        ? `It appeared on ${v.signals.appearances} trending list(s) between ${v.signals.first_seen} and ${v.signals.last_seen}${v.signals.peak_stars_period ? `, gaining up to ${fmtInt(v.signals.peak_stars_period)} stars in a single day` : ""}.`
         : "It has not appeared on a trending list in Kinly's window; it was added by hand or from your stars.",
   );
   lines.push("");
@@ -50,7 +50,7 @@ export function resourcePage(v: RepoView, options: { generatedAt?: string; quick
   lines.push("");
   lines.push(
     options.quickStart ??
-      `\`\`\`bash\ngit clone https://github.com/${r.full_name}\ncd ${r.name}\n# read README.md, then run the quick start it describes\n\`\`\`\n\nLook for a Docker image, a one-line installer or a hosted demo first; if none exists, budget more than 15 minutes.`,
+      `Run it in a throwaway container, never on a machine that holds credentials:\n\n\`\`\`bash\ndocker run --rm -it --name kinly-test node:24 bash        # or python:3.13 for a Python repo\ngit clone --depth 1 https://github.com/${r.full_name} && cd ${r.name}\nnpm install --ignore-scripts                              # pip install --no-deps -r requirements.txt\n# read any install/postinstall script before re-enabling it; then follow the README's quick start\n\`\`\`\n\nLook for a Docker image, a one-line installer or a hosted demo first; if none exists, budget more than 15 minutes.`,
   );
   lines.push("");
   lines.push(`## Licence note`);
@@ -70,18 +70,32 @@ export function resourcePage(v: RepoView, options: { generatedAt?: string; quick
   );
   if (r.open_core) lines.push("\nOpen-core: an `ee/` or `enterprise/` tree exists. The free edition and the paid edition differ; confirm the feature you need is in the free one.");
   lines.push("");
-  lines.push(`## Owner rating and test log`);
+  lines.push(`## Test log`);
+  lines.push("");
+  if (v.agent_rating) {
+    lines.push(`Kinly agent${v.agent_rating.agent ? ` (${v.agent_rating.agent})` : ""}: **${v.agent_rating.rating}/5**, ${v.agent_rating.updated_at.slice(0, 10)}${v.agent_rating.notes ? ` — ${v.agent_rating.notes}` : ""}`);
+    if (v.agent_rating.test_log) {
+      lines.push("");
+      lines.push("```text");
+      lines.push(v.agent_rating.test_log.replace(/```/g, "ʼʼʼ"));
+      lines.push("```");
+    }
+  } else if (!options.testLog) {
+    lines.push("_Not tested yet._");
+  }
+  if (options.testLog) {
+    lines.push("");
+    lines.push(options.testLog);
+  }
+  lines.push("");
+  lines.push(`## Owner rating`);
   lines.push("");
   if (v.rating) {
     lines.push(`**${"★".repeat(v.rating.rating)}${"☆".repeat(5 - v.rating.rating)}** tested ${v.rating.tested_at ?? "—"}${v.rating.verdict_override ? ` · verdict overridden to ${v.rating.verdict_override}` : ""}`);
     lines.push("");
     lines.push(v.rating.notes ?? "_No notes._");
   } else {
-    lines.push("_Not rated yet._");
-  }
-  if (options.testLog) {
-    lines.push("");
-    lines.push(options.testLog);
+    lines.push("_Not rated yet. Only the owner's rating moves a repo to rated._");
   }
   if (v.shortlist) lines.push(`\n_Shortlist status: ${v.shortlist.status} (${v.shortlist.updated_at.slice(0, 10)})${v.shortlist.note ? ` — ${v.shortlist.note}` : ""}_`);
   lines.push("");

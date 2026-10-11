@@ -28,6 +28,9 @@ export function landscapeReport(store: Store, profile: Profile | null, options: 
 
   const parts: string[] = [];
   parts.push(h1(`Kinly Landscape — ${options.from} to ${options.to}`, `What trended on GitHub over ${options.from} → ${options.to}, from ${fmtInt(stats.appearances)} list appearances across ${fmtInt(stats.repos)} repositories, read month by month and category by category.`));
+  parts.push(
+    `> **Coverage.** ${options.from} → ${options.to}. Until 2026-10-08 the only daily record is the larsbijl trending archive, which keeps six per-language lists (Python, Go, Rust, C++, JavaScript, TypeScript) and no all-languages list; repositories that trended only under other languages are missing from those months. From 2026-10-08 Kinly also collects the live all-languages, weekly, monthly and ten per-language lists. Persistence counts distinct ISO weeks on any of these lists; star curves for the leaders come from GitHub's stargazers history.\n`,
+  );
   if (options.narrative) parts.push(`${options.narrative.trim()}\n`);
 
   // All-time persistence
@@ -36,14 +39,15 @@ export function landscapeReport(store: Store, profile: Profile | null, options: 
   parts.push("_Ranked by distinct weeks on any trending list in the window. Persistence is the strongest signal this data has: a repo that returns week after week has a reason._\n");
   parts.push(
     table(
-      ["#", "Repository", "Weeks", "Stars", "Category", "Licence", "Score", "Verdict", "What it does"],
-      persistent.map((v) => [v.rank, repoLink(v.repo.full_name) + (v.starred ? " ⭐" : ""), v.signals.distinct_weeks, fmtInt(v.repo.stars), categoryLabel(v.repo.category), licenseLabel(v), v.score.total, verdictBadge(v), oneLiner(v, 100)]),
+      ["#", "Repository", "Weeks", "Stars", "Best week", "Category", "Licence", "Score", "Verdict", "What it does"],
+      persistent.map((v) => [v.rank, repoLink(v.repo.full_name) + (v.starred ? " ⭐" : ""), v.signals.distinct_weeks, fmtInt(v.repo.stars), v.signals.peak_week_stars !== null ? `+${fmtInt(v.signals.peak_week_stars)}` : "—", categoryLabel(v.repo.category), licenseLabel(v), v.score.total, verdictBadge(v), oneLiner(v, 100)]),
     ),
   );
 
   // Picks across the window
-  const picks = persistent.filter((v) => v.score.verdict === "BUILD").slice(0, 10);
+  const picks = persistent.filter((v) => v.score.verdict === "BUILD" && !v.starred && !(v.shortlist && v.shortlist.status !== "discovered")).slice(0, 10);
   parts.push(`\n## Ten to test first\n`);
+  parts.push("_BUILD-grade leaders you have not starred or shortlisted yet._\n");
   if (picks.length === 0) parts.push("_No BUILD-grade repositories yet; enrich and score first._\n");
   picks.forEach((v, i) => parts.push(pickBlock(v, i + 1)));
 

@@ -3,8 +3,8 @@ import type { Profile } from "../types.js";
 import { CATEGORY_LABELS } from "../classify/rules.js";
 import { addDays, isoNow } from "../util/dates.js";
 import { fmtInt } from "../util/text.js";
-import { perCategory, rankedList, repoView, type RankedView } from "../views.js";
-import { businessUse, categoryLabel, footer, h1, licenseLabel, oneLiner, pickBlock, rankedTable, repoLink, table, verdictBadge } from "./markdown.js";
+import { perCategory, rankedList, repoView, selectPicks, type PickResult, type RankedView } from "../views.js";
+import { businessUse, categoryLabel, coverageNote, footer, h1, type RunHealth, licenseLabel, oneLiner, pickBlock, rankedTable, repoLink, table, verdictBadge } from "./markdown.js";
 
 export interface DailyReportOptions {
   date: string;
@@ -13,6 +13,13 @@ export interface DailyReportOptions {
   perCategory?: number;
   generatedAt?: string;
   sources?: readonly string[];
+  health?: RunHealth;
+}
+
+/** Today's list and its picks: shared by the report and by the job that records what was picked. */
+export function dailySelection(store: Store, profile: Profile | null, date: string, picksN = 5): { today: RankedView[]; selection: PickResult } {
+  const today = rankedList(store, "today", profile, { date, limit: 60, candidates: 120 });
+  return { today, selection: selectPicks(store, today, { date, n: picksN }) };
 }
 
 /** The daily brief for one date. */
@@ -23,15 +30,13 @@ export function dailyReport(store: Store, profile: Profile | null, options: Dail
   const perCat = options.perCategory ?? 3;
   const generatedAt = options.generatedAt ?? isoNow();
 
-  const today = rankedList(store, "today", profile, { date, limit: 60, candidates: 120 });
+  const { today, selection } = dailySelection(store, profile, date, picksN);
   const topToday = today.slice(0, topN);
-  const picks = [...today]
-    .filter((v) => v.relevance >= 40 && v.score.verdict !== "SKIP")
-    .sort((a, b) => b.relevance * 0.6 + b.score.total * 0.4 - (a.relevance * 0.6 + a.score.total * 0.4))
-    .slice(0, picksN);
+  const picks = selection.picks;
   const repeaters = today.filter((v) => v.signals.distinct_days >= 3).sort((a, b) => b.signals.distinct_days - a.signals.distinct_days).slice(0, 10);
   const newcomers = today.filter((v) => v.signals.first_seen !== null && v.signals.first_seen >= addDays(date, -1)).slice(0, 10);
-  const byCat = perCategory(today, perCat);
+  // The daily view keeps to the categories the owner weights at 0.5 or more (P-M2); the weekly shows all of them.
+  const byCat = new Map([...perCategory(today, perCat)].filter(([cat]) => !profile || (profile.category_weights[cat] ?? 0.3) >= 0.5));
   const stars = today.filter((v) => v.starred);
   const nudges = store
     .listShortlist()
@@ -41,12 +46,18 @@ export function dailyReport(store: Store, profile: Profile | null, options: Dail
   const parts: string[] = [];
   parts.push(h1(`Kinly Daily — ${date}`, `What trended on GitHub today, what it is for, and which of it is worth your time. ${today.length} repositories on today's lists; ${picks.length} picks for Vantik Systems / FeetBit.`));
 
+  parts.push(coverageNote(today));
   parts.push(`## Top ${topToday.length} today\n`);
   parts.push(rankedTable(topToday, { metricHeader: "Today" }));
 
   parts.push(`\n## Picks for Vantik Systems and FeetBit\n`);
-  if (picks.length === 0) parts.push("_Nothing on today's list clears the relevance bar (40/100). That is a valid answer; the firehose is not the product._\n");
+  if (selection.wip.length >= 5) {
+    parts.push(`_The testing bench is full (${selection.wip.length} repos shortlisted or in testing: ${selection.wip.slice(0, 5).map((n) => `\`${n}\``).join(", ")}). Rate or drop one before taking new picks._\n`);
+  } else if (picks.length === 0) {
+    parts.push("_Nothing new on today's list clears the bar (relevance 50, score 45, not already known). That is a valid answer; the firehose is not the product._\n");
+  }
   picks.forEach((v, i) => parts.push(pickBlock(v, i + 1)));
+  if (selection.known.length > 0) parts.push(`\n_Still trending, already known to you: ${selection.known.map((v) => repoLink(v.repo.full_name)).join(", ")}._\n`);
 
   parts.push(`\n## Repeat trenders (3+ days on the list)\n`);
   parts.push(
@@ -94,7 +105,7 @@ export function dailyReport(store: Store, profile: Profile | null, options: Dail
     );
   }
 
-  parts.push(footer(generatedAt, options.sources ?? []));
+  parts.push(footer(generatedAt, options.sources ?? [], options.health ?? {}));
   return parts.join("\n");
 }
 

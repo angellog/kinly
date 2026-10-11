@@ -121,3 +121,16 @@ describe("trending scrape bounds (R7)", () => {
     assert.equal(calls, 1);
   });
 });
+
+describe("stall detection (E-M4b)", () => {
+  it("flags a daily list identical to yesterday's, and nothing else", async () => {
+    const { detectStalls } = await import("../src/sources/stall.js");
+    const rows = parseTrendingHtml(fixture("trending-daily-2026-10-08.html"), "daily");
+    const mk = (window: "daily" | "weekly", language: string, entries = rows) => ({ source: "trending-page" as const, window, list_date: "2026-10-08", language_list: language, fetched_at: "", entries });
+    const yesterday = [mk("daily", "all"), mk("daily", "python"), mk("weekly", "all")];
+    const shuffled = [...rows].reverse();
+    const today = [mk("daily", "all"), mk("daily", "python", shuffled), mk("weekly", "all")];
+    assert.deepEqual(detectStalls(today, yesterday), ["daily/all"]);
+    assert.deepEqual(detectStalls(today, []), []);
+  });
+});

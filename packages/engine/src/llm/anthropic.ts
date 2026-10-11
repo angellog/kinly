@@ -121,7 +121,10 @@ export class Llm {
       return response.parsed_output ?? null;
     } catch (err) {
       if (err instanceof Anthropic.RateLimitError) this.log(`llm rate limited on ${repo.full_name}`);
-      else if (err instanceof Anthropic.AuthenticationError) this.log("llm authentication failed: check ANTHROPIC_API_KEY");
+      else if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+        this.log("llm authentication failed: check ANTHROPIC_API_KEY");
+        this.store?.setMeta("llm_auth_error_at", new Date().toISOString());
+      }
       else if (err instanceof Anthropic.APIError) this.log(`llm api error ${err.status} on ${repo.full_name}: ${err.message}`);
       else this.log(`llm error on ${repo.full_name}: ${err instanceof Error ? err.message : String(err)}`);
       return null;

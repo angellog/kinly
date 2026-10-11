@@ -96,9 +96,28 @@ export function starTopicWeights(stars: readonly UserStar[]): Record<string, num
   return out;
 }
 
-export function buildProfile(stars: readonly UserStar[], overrides: Partial<Profile> = {}): Profile {
+/**
+ * Category weights from what the owner actually stars (review P-M2): each
+ * category's share of the stars, scaled so the most-starred category is 1.
+ * Blended 50/50 with the defaults so business categories the owner rarely
+ * stars (marketing, operations) keep a floor.
+ */
+export function starCategoryWeights(categories: readonly CategoryId[]): Partial<Record<CategoryId, number>> {
+  if (categories.length === 0) return {};
+  const counts = new Map<CategoryId, number>();
+  for (const c of categories) if (c !== "other") counts.set(c, (counts.get(c) ?? 0) + 1);
+  const max = Math.max(1, ...counts.values());
+  const out: Partial<Record<CategoryId, number>> = {};
+  for (const id of Object.keys(DEFAULT_CATEGORY_WEIGHTS) as CategoryId[]) {
+    const derived = (counts.get(id) ?? 0) / max;
+    out[id] = Number((0.5 * DEFAULT_CATEGORY_WEIGHTS[id] + 0.5 * derived).toFixed(2));
+  }
+  return out;
+}
+
+export function buildProfile(stars: readonly UserStar[], overrides: Partial<Profile> = {}, starCategories: readonly CategoryId[] = []): Profile {
   return {
-    category_weights: { ...DEFAULT_CATEGORY_WEIGHTS, ...(overrides.category_weights ?? {}) },
+    category_weights: { ...DEFAULT_CATEGORY_WEIGHTS, ...starCategoryWeights(starCategories), ...(overrides.category_weights ?? {}) },
     keywords: { ...DEFAULT_KEYWORDS, ...(overrides.keywords ?? {}) },
     star_topics: overrides.star_topics ?? starTopicWeights(stars),
     business_context: overrides.business_context ?? DEFAULT_BUSINESS_CONTEXT,

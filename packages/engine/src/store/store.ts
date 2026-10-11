@@ -2,10 +2,12 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { MIGRATIONS } from "./schema.js";
+import { peakWeek, sevenDay } from "../github/star-history.js";
 import {
   CATEGORY_IDS,
   LIST_KINDS,
   SHORTLIST_STATUSES,
+  type AgentRating,
   type CategoryId,
   type CategorySource,
   type LicenseClass,
@@ -19,6 +21,7 @@ import {
   type ShortlistStatus,
   type Snapshot,
   type SourceId,
+  type StarWeek,
   type TrendSignals,
   type Verdict,
   type Window,
@@ -154,6 +157,17 @@ function rowToShortlist(r: Row): ShortlistEntry {
   };
 }
 
+function rowToAgentRating(r: Row): AgentRating {
+  return {
+    full_name: String(r["full_name"]),
+    rating: num(r["rating"]) ?? 0,
+    notes: str(r["notes"]),
+    test_log: str(r["test_log"]),
+    agent: str(r["agent"]),
+    updated_at: String(r["updated_at"]),
+  };
+}
+
 function rowToRating(r: Row): Rating {
   return {
     full_name: String(r["full_name"]),
@@ -264,10 +278,11 @@ export class Store {
           skipped++;
           continue;
         }
-        const [owner, name] = e.full_name.split("/") as [string, string];
-        insRepo.run(e.full_name, owner, name, cleanText(e.description, 500), cleanText(e.language, 40), e.stars_total ?? null, e.forks ?? null);
+        const fullName = this.resolveAlias(e.full_name);
+        const [owner, name] = fullName.split("/") as [string, string];
+        insRepo.run(fullName, owner, name, cleanText(e.description, 500), cleanText(e.language, 40), e.stars_total ?? null, e.forks ?? null);
         const res = insApp.run(
-          e.full_name,
+          fullName,
           snap.source,
           snap.window,
           snap.list_date,
@@ -279,7 +294,7 @@ export class Store {
         if (Number(res.changes) > 0) inserted++;
         else skipped++;
         if (typeof e.stars_total === "number" && Number.isFinite(e.stars_total)) {
-          insStar.run(e.full_name, `${snap.list_date}T00:00:00Z`, Math.round(e.stars_total));
+          insStar.run(fullName, `${snap.list_date}T00:00:00Z`, Math.round(e.stars_total));
         }
       }
     });
@@ -503,7 +518,7 @@ export class Store {
     const agg = this.db
       .prepare(
         `SELECT COUNT(*) AS n, COUNT(DISTINCT list_date) AS days, COUNT(DISTINCT strftime('%Y-%W', list_date)) AS weeks,
-                MIN(list_date) AS first_seen, MAX(list_date) AS last_seen, MAX(stars_period) AS peak,
+                MIN(list_date) AS first_seen, MAX(list_date) AS last_seen, MAX(CASE WHEN window = 'daily' THEN stars_period END) AS peak,
                 GROUP_CONCAT(DISTINCT source) AS sources
          FROM appearances WHERE full_name = ? AND list_date >= ?`,
       )
@@ -516,9 +531,26 @@ export class Store {
       first_seen: str(agg["first_seen"]),
       last_seen: str(agg["last_seen"]),
       peak_stars_period: num(agg["peak"]),
-      velocity_7d: this.velocity(fullName, 7),
+      ...this.historySignals(fullName),
       sources: (str(agg["sources"]) ?? "").split(",").filter((s): s is SourceId => s.length > 0),
     };
+  }
+
+  /** Velocity from stargazers history when it was fetched in the last 3 days, else from star-count snapshots. */
+  private historySignals(fullName: string): Pick<TrendSignals, "velocity_7d" | "stars_7d" | "peak_week_stars"> {
+    const fetched = this.starWeeksFetchedAt(fullName);
+    if (fetched) {
+      const weeks = this.starWeeks(fullName, 156);
+      const peak = peakWeek(weeks);
+      const fresh = Date.parse(fetched) >= Date.now() - 3 * 86_400_000;
+      const sd = sevenDay(weeks, fetched.slice(0, 10));
+      return {
+        velocity_7d: fresh && sd ? sd.perDay : this.velocity(fullName, 7),
+        stars_7d: fresh && sd ? sd.stars7d : null,
+        peak_week_stars: peak ? peak.total : null,
+      };
+    }
+    return { velocity_7d: this.velocity(fullName, 7), stars_7d: null, peak_week_stars: null };
   }
 
   /** Stars per day between the oldest and newest observation within the last `days` days. */
@@ -802,6 +834,102 @@ export class Store {
 
   listRatings(): Rating[] {
     return (this.db.prepare("SELECT * FROM ratings ORDER BY updated_at DESC").all() as Row[]).map(rowToRating);
+  }
+
+  /** The agent's test result. Moves `shortlisted` to `testing`, never to `rated` (P-M5). */
+  setAgentRating(fullName: string, input: { rating: number; notes?: string | null; test_log?: string | null; agent?: string | null }): AgentRating {
+    if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5) throw new Error("rating must be an integer 1..5");
+    this.ensureRepo(fullName);
+    this.db
+      .prepare(
+        `INSERT INTO agent_ratings (full_name, rating, notes, test_log, agent, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(full_name) DO UPDATE SET rating = excluded.rating, notes = excluded.notes,
+           test_log = COALESCE(excluded.test_log, agent_ratings.test_log), agent = excluded.agent, updated_at = excluded.updated_at`,
+      )
+      .run(fullName, input.rating, cleanText(input.notes, 2000), cleanText(input.test_log, 20_000, { multiline: true }), cleanText(input.agent, 80), isoNow());
+    const sl = this.getShortlist(fullName);
+    if (!sl || sl.status === "discovered" || sl.status === "shortlisted") this.setShortlist(fullName, "testing", sl?.note ?? null);
+    return this.getAgentRating(fullName) as AgentRating;
+  }
+
+  getAgentRating(fullName: string): AgentRating | null {
+    const r = this.db.prepare("SELECT * FROM agent_ratings WHERE full_name = ?").get(fullName) as Row | undefined;
+    return r ? rowToAgentRating(r) : null;
+  }
+
+  listAgentRatings(): AgentRating[] {
+    return (this.db.prepare("SELECT * FROM agent_ratings ORDER BY updated_at DESC").all() as Row[]).map(rowToAgentRating);
+  }
+
+  // ─── renames (E-m1) ──────────────────────────────────────────────────────
+
+  /** The current name for a repo that was renamed or transferred, else the name itself. */
+  resolveAlias(fullName: string): string {
+    const r = this.db.prepare("SELECT to_name FROM aliases WHERE from_name = ?").get(fullName) as Row | undefined;
+    return r ? String(r["to_name"]) : fullName;
+  }
+
+  /**
+   * Fold a repo's old name into its current one: history, owner state and
+   * stars move to the new name in one transaction, and the old name becomes
+   * an alias so archive rows that still carry it land on the right repo.
+   */
+  renameRepo(from: string, to: string): void {
+    if (from === to || !isFullName(to)) return;
+    const [owner, name] = to.split("/") as [string, string];
+    this.transaction(() => {
+      const target = this.db.prepare("SELECT 1 FROM repos WHERE full_name = ?").get(to);
+      if (target) this.db.prepare("DELETE FROM repos WHERE full_name = ?").run(from);
+      else this.db.prepare("UPDATE repos SET full_name = ?, owner = ?, name = ? WHERE full_name = ?").run(to, owner, name, from);
+      for (const table of ["appearances", "star_history", "star_weeks", "picks", "shortlist", "ratings", "agent_ratings", "resources", "user_stars"]) {
+        this.db.prepare(`UPDATE OR IGNORE ${table} SET full_name = ? WHERE full_name = ?`).run(to, from);
+        this.db.prepare(`DELETE FROM ${table} WHERE full_name = ?`).run(from);
+      }
+      this.db.prepare("DELETE FROM scores WHERE full_name = ?").run(from);
+      this.db.prepare("UPDATE aliases SET to_name = ? WHERE to_name = ?").run(to, from);
+      this.db.prepare("INSERT OR REPLACE INTO aliases (from_name, to_name, seen_at) VALUES (?, ?, ?)").run(from, to, isoNow());
+    });
+  }
+
+  // ─── stargazers history (D13) ────────────────────────────────────────────
+
+  saveStarWeeks(fullName: string, weeks: readonly StarWeek[], fetchedAt: string = isoNow()): void {
+    const ins = this.db.prepare(
+      `INSERT INTO star_weeks (full_name, week_start, total, days, fetched_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(full_name, week_start) DO UPDATE SET total = excluded.total, days = excluded.days, fetched_at = excluded.fetched_at`,
+    );
+    this.transaction(() => {
+      for (const w of weeks) ins.run(fullName, w.week_start, Math.max(0, Math.round(w.total)), JSON.stringify(w.days.slice(0, 7).map((d) => Math.max(0, Math.round(d)))), fetchedAt);
+    });
+  }
+
+  /** Weeks newest first. */
+  starWeeks(fullName: string, limit = 104): StarWeek[] {
+    const rows = this.db.prepare("SELECT week_start, total, days FROM star_weeks WHERE full_name = ? ORDER BY week_start DESC LIMIT ?").all(fullName, limit) as Row[];
+    return rows.map((r) => ({ week_start: String(r["week_start"]), total: num(r["total"]) ?? 0, days: JSON.parse(String(r["days"])) as number[] }));
+  }
+
+  /** When the history was last fetched for a repo, or null. */
+  starWeeksFetchedAt(fullName: string): string | null {
+    const r = this.db.prepare("SELECT MAX(fetched_at) AS f FROM star_weeks WHERE full_name = ?").get(fullName) as Row | undefined;
+    return r ? str(r["f"]) : null;
+  }
+
+  // ─── pick memory (D14) ───────────────────────────────────────────────────
+
+  recordPicks(kind: string, date: string, names: readonly string[]): void {
+    const ins = this.db.prepare("INSERT OR IGNORE INTO picks (full_name, kind, pick_date) VALUES (?, ?, ?)");
+    this.transaction(() => {
+      for (const n of names) ins.run(n, kind, date);
+    });
+  }
+
+  /** Repos picked on any day in [since, before), optionally only by one kind of report. */
+  pickedBetween(since: string, before: string, kind?: string): Set<string> {
+    const rows = (kind
+      ? this.db.prepare("SELECT DISTINCT full_name FROM picks WHERE pick_date >= ? AND pick_date < ? AND kind = ?").all(since, before, kind)
+      : this.db.prepare("SELECT DISTINCT full_name FROM picks WHERE pick_date >= ? AND pick_date < ?").all(since, before)) as Row[];
+    return new Set(rows.map((r) => String(r["full_name"])));
   }
 
   // ─── scores ──────────────────────────────────────────────────────────────

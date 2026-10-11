@@ -113,4 +113,34 @@ export const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (source, list_date)
   );
   `,
+  // 2 — review v1.1: renames (E-m1), agent vs owner ratings (P-M5), stargazers history (D13), pick memory (D14).
+  `
+  CREATE TABLE IF NOT EXISTS aliases (
+    from_name TEXT PRIMARY KEY,
+    to_name   TEXT NOT NULL,
+    seen_at   TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS agent_ratings (
+    full_name  TEXT PRIMARY KEY,
+    rating     INTEGER NOT NULL,
+    notes      TEXT,
+    test_log   TEXT,
+    agent      TEXT,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS star_weeks (
+    full_name  TEXT NOT NULL,
+    week_start TEXT NOT NULL,
+    total      INTEGER NOT NULL,
+    days       TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (full_name, week_start)
+  );
+  CREATE TABLE IF NOT EXISTS picks (
+    full_name TEXT NOT NULL,
+    kind      TEXT NOT NULL,
+    pick_date TEXT NOT NULL,
+    PRIMARY KEY (full_name, kind, pick_date)
+  );
+  `,
 ];

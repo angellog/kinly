@@ -12,3 +12,8 @@ output/
 .DS_Store
 .tmp/
 coverage/
+.kinly/
+# Data, reports and resources live in angellog/kinly-data (KINLY_DATA_ROOT), never in the code repo.
+/data/
+/reports/
+/resources/
