@@ -91,3 +91,33 @@ describe("vitalets archive", () => {
     assert.equal(parseVitaletsComment({ created_at: "2026-09-01T00:00:00Z", body: "nothing here" }, "daily"), null);
   });
 });
+
+describe("trending scrape bounds (R7)", () => {
+  it("never fetches more than 3 windows + 10 language pages", async () => {
+    const { fetchAllTrending, MAX_TRENDING_LANGUAGES, TRENDING_LANGUAGES } = await import("../src/sources/trending-page.js");
+    assert.ok(TRENDING_LANGUAGES.length <= MAX_TRENDING_LANGUAGES);
+    assert.equal(MAX_TRENDING_LANGUAGES, 10);
+    const html = fixture("trending-daily-2026-10-08.html");
+    const urls: string[] = [];
+    const fakeFetch = (async (url: string | URL | Request) => {
+      urls.push(String(url));
+      return new Response(html, { status: 200 });
+    }) as typeof fetch;
+    const many = Array.from({ length: 25 }, (_, i) => `lang${i}`);
+    const res = await fetchAllTrending({ fetchImpl: fakeFetch, languages: many, delayMs: 0, listDate: "2026-10-08" });
+    assert.equal(urls.length, 13);
+    assert.equal(res.snapshots.length, 13);
+    assert.ok(urls.every((u) => u.startsWith("https://github.com/trending")));
+  });
+
+  it("does not retry a layout change", async () => {
+    const { fetchTrending, TrendingParseError: TPE } = await import("../src/sources/trending-page.js");
+    let calls = 0;
+    const fakeFetch = (async () => {
+      calls++;
+      return new Response("<html></html>", { status: 200 });
+    }) as typeof fetch;
+    await assert.rejects(fetchTrending("daily", "all", { fetchImpl: fakeFetch, retries: 3 }), TPE);
+    assert.equal(calls, 1);
+  });
+});

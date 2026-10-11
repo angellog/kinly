@@ -40,15 +40,20 @@ export function loadEnv(file: string = path.resolve(process.cwd(), ".env")): Rec
  * fallback is for local runs on the owner's machine; a server has no gh.
  */
 export function resolveGitHubToken(): string | null {
+  return resolveGitHubTokenWithSource().token;
+}
+
+/** Where the token came from: `env` (GITHUB_TOKEN / GH_TOKEN) or `gh` (the owner's CLI login, full scope). */
+export function resolveGitHubTokenWithSource(): { token: string | null; source: "env" | "gh" | null } {
   const fromEnv = process.env["GITHUB_TOKEN"] ?? process.env["GH_TOKEN"];
-  if (fromEnv && fromEnv.trim()) return fromEnv.trim();
-  if (process.env["KINLY_NO_GH_FALLBACK"] === "1") return null;
+  if (fromEnv && fromEnv.trim()) return { token: fromEnv.trim(), source: "env" };
+  if (process.env["KINLY_NO_GH_FALLBACK"] === "1") return { token: null, source: null };
   try {
     const out = execFileSync("gh", ["auth", "token"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5000 });
     const token = out.trim();
-    return token.length > 0 ? token : null;
+    return token.length > 0 ? { token, source: "gh" } : { token: null, source: null };
   } catch {
-    return null;
+    return { token: null, source: null };
   }
 }
 

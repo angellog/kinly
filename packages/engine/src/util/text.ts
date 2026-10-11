@@ -73,3 +73,46 @@ export function fmtInt(n: number | null | undefined): string {
   if (n === null || n === undefined || !Number.isFinite(n)) return "—";
   return new Intl.NumberFormat("en-US").format(Math.round(n));
 }
+
+// ─── untrusted third-party text (D15) ────────────────────────────────────────
+
+// C0/C1 controls (keeping tab and newline), zero-width and bidi-override characters.
+const CONTROL_RE = new RegExp("[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff]", "g");
+
+/**
+ * Normalize a string that came from someone else's repository: decode
+ * entities, drop tags and control/bidi characters, collapse whitespace, cap
+ * the length. The result is plain text; renderers still escape it.
+ */
+export function cleanText(text: string | null | undefined, max: number, options: { multiline?: boolean } = {}): string | null {
+  if (text === null || text === undefined) return null;
+  let t = decodeEntities(String(text));
+  t = t.replace(/<!--[\s\S]*?-->/g, " ").replace(/<\/?[a-z][^>]*>/gi, " ");
+  t = t.replace(CONTROL_RE, "");
+  t = options.multiline ? t.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim() : squash(t);
+  if (t.length === 0) return null;
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t;
+}
+
+/** An http(s) URL or null; anything else (javascript:, data:, relative) is dropped. */
+export function cleanUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const t = url.trim();
+  try {
+    const u = new URL(t);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.toString().slice(0, 300) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** GitHub topic syntax only: lowercase letters, digits, hyphens; at most 30 topics of 50 chars. */
+export function cleanTopics(topics: readonly string[] | null | undefined): string[] {
+  const out: string[] = [];
+  for (const t of topics ?? []) {
+    const v = String(t).toLowerCase().trim();
+    if (/^[a-z0-9][a-z0-9-]{0,49}$/.test(v) && !out.includes(v)) out.push(v);
+    if (out.length >= 30) break;
+  }
+  return out;
+}

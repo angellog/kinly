@@ -171,8 +171,9 @@ export async function backfill(ctx: JobContext, options: { from: string; to?: st
     let missing = 0;
     let errors = 0;
     let inserted = 0;
+    const diskByDate = new Map(listSnapshotFiles(ctx.config.dataDir, "larsbijl-archive").map((f) => [f.date, f] as const));
     for (const date of dates) {
-      const onDisk = listSnapshotFiles(ctx.config.dataDir, "larsbijl-archive").find((f) => f.date === date);
+      const onDisk = diskByDate.get(date);
       if (onDisk && !options.refetch) {
         if (!ctx.store.hasSnapshot("larsbijl-archive", date)) {
           const file = readSnapshotFile(onDisk.file);
@@ -375,7 +376,8 @@ export function exportData(ctx: JobContext): { repos: number; shards: number } {
   for (const r of bundle.repos) {
     const k = shardKey(r.full_name);
     const arr = shards.get(k) ?? [];
-    arr.push(r);
+    // README text belongs to its authors; only Kinly's own summary is published (R6).
+    arr.push({ ...r, readme_excerpt: null });
     shards.set(k, arr);
   }
   for (const [k, arr] of shards) writeFileSync(path.join(reposDir, `${k}.json`), `${JSON.stringify(arr, null, 0)}\n`);
@@ -446,7 +448,7 @@ export async function fetchDataFromRepo(ctx: JobContext, options: { fetchImpl?: 
     if (!rel.startsWith("data/") || rel.includes("..")) continue;
     const text = await get(rel);
     if (text === null) continue;
-    const out = path.join(ctx.config.root, rel);
+    const out = path.join(ctx.config.dataRoot, rel);
     mkdirSync(path.dirname(out), { recursive: true });
     writeFileSync(out, text);
     files++;
@@ -457,7 +459,7 @@ export async function fetchDataFromRepo(ctx: JobContext, options: { fetchImpl?: 
 
 /** Write data/manifest.json: every file under data/ that the server should mirror on boot. */
 export function writeDataManifest(ctx: JobContext): { files: number } {
-  const root = ctx.config.root;
+  const root = ctx.config.dataRoot;
   const dataDir = ctx.config.dataDir;
   const files: string[] = [];
   const walk = (dir: string): void => {
@@ -476,12 +478,17 @@ export function writeDataManifest(ctx: JobContext): { files: number } {
 // ─── publish to the repo ─────────────────────────────────────────────────────
 
 /** Push the day's artefacts (reports, snapshots, user state, manifest) to the public repo. No-op without a token. */
-export async function publishToRepo(ctx: JobContext, options: { paths?: string[]; message?: string } = {}): Promise<Record<string, unknown>> {
+export async function publishToRepo(ctx: JobContext, options: { paths?: string[]; message?: string; allowGhToken?: boolean } = {}): Promise<Record<string, unknown>> {
   if (!ctx.github.authenticated) {
     ctx.log("publish: no GITHUB_TOKEN; skipping repo sync");
     return { committed: false, reason: "no token" };
   }
-  const root = ctx.config.root;
+  if (ctx.config.githubTokenSource === "gh" && !options.allowGhToken) {
+    // D5: the gh CLI token has repo scope on every repo the owner has. It may read; it never publishes unattended.
+    ctx.log("publish: refusing the gh CLI token; set GITHUB_TOKEN to a fine-grained PAT, or pass --use-gh-token by hand");
+    return { committed: false, reason: "gh token refused" };
+  }
+  const root = ctx.config.dataRoot;
   const rels = options.paths ?? defaultPublishPaths(ctx);
   const files: PublishFile[] = [];
   for (const rel of rels) {
@@ -494,7 +501,7 @@ export async function publishToRepo(ctx: JobContext, options: { paths?: string[]
 }
 
 function defaultPublishPaths(ctx: JobContext): string[] {
-  const root = ctx.config.root;
+  const root = ctx.config.dataRoot;
   const today = isoDate();
   const out = new Set<string>();
   const add = (abs: string): void => {

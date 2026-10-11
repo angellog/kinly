@@ -14,6 +14,9 @@ import { decodeEntities, isFullName, parseCount, squash, stripTags } from "../ut
  * "trending repositories are being dissected" notice during rebuilds.
  */
 
+/** Hard cap on per-language lists (R7): the scrape stays at 3 + 10 pages a day. */
+export const MAX_TRENDING_LANGUAGES = 10;
+
 export const TRENDING_LANGUAGES: readonly string[] = [
   "python",
   "typescript",
@@ -83,6 +86,8 @@ export interface FetchTrendingOptions {
   /** The date to stamp the list with; defaults to today (UTC). */
   listDate?: string;
   retries?: number;
+  /** Pause between page fetches in fetchAllTrending (default 900 ms). */
+  delayMs?: number;
 }
 
 /** Fetch and parse one live trending list. */
@@ -94,7 +99,10 @@ export async function fetchTrending(window: Window, language = "all", options: F
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetchImpl(url, { headers: { "user-agent": USER_AGENT, accept: "text/html" }, redirect: "follow" });
-      if (res.status === 429 || res.status >= 500) throw new Error(`HTTP ${res.status} from ${url}`);
+      if (res.status === 429 || res.status >= 500) {
+        const retryAfter = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
+        throw Object.assign(new Error(`HTTP ${res.status} from ${url}`), { retryAfterMs: Number.isFinite(retryAfter) ? Math.min(retryAfter, 120) * 1000 : null });
+      }
       if (!res.ok) throw new TrendingParseError(`HTTP ${res.status} from ${url}`);
       const html = await res.text();
       const entries = parseTrendingHtml(html, window);
@@ -108,7 +116,11 @@ export async function fetchTrending(window: Window, language = "all", options: F
       };
     } catch (err) {
       lastErr = err;
-      if (attempt < retries) await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      if (err instanceof TrendingParseError) break; // a 404 or a layout change does not get better by retrying
+      if (attempt < retries) {
+        const hinted = (err as { retryAfterMs?: number | null }).retryAfterMs;
+        await new Promise((r) => setTimeout(r, hinted ?? 2000 * 2 ** attempt));
+      }
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
@@ -120,7 +132,8 @@ export async function fetchAllTrending(options: FetchTrendingOptions & { languag
   failures: Array<{ window: Window; language: string; error: string }>;
 }> {
   const windows = options.windows ?? (["daily", "weekly", "monthly"] as const);
-  const languages = options.languages ?? TRENDING_LANGUAGES;
+  const languages = (options.languages ?? TRENDING_LANGUAGES).slice(0, MAX_TRENDING_LANGUAGES);
+  const delayMs = options.delayMs ?? 900;
   const snapshots: Snapshot[] = [];
   const failures: Array<{ window: Window; language: string; error: string }> = [];
   const jobs: Array<{ window: Window; language: string }> = [];
@@ -133,7 +146,7 @@ export async function fetchAllTrending(options: FetchTrendingOptions & { languag
       failures.push({ window: job.window, language: job.language, error: err instanceof Error ? err.message : String(err) });
     }
     // Be a polite scraper: ~1 request/second.
-    await new Promise((r) => setTimeout(r, 900));
+    if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
   }
   return { snapshots, failures };
 }

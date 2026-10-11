@@ -24,7 +24,7 @@ import {
   type Window,
 } from "../types.js";
 import { addDays, isoNow, monthStart, weekStart } from "../util/dates.js";
-import { isFullName } from "../util/text.js";
+import { cleanText, cleanTopics, cleanUrl, isFullName } from "../util/text.js";
 
 type Row = Record<string, SQLInputValue>;
 
@@ -265,7 +265,7 @@ export class Store {
           continue;
         }
         const [owner, name] = e.full_name.split("/") as [string, string];
-        insRepo.run(e.full_name, owner, name, e.description ?? null, e.language ?? null, e.stars_total ?? null, e.forks ?? null);
+        insRepo.run(e.full_name, owner, name, cleanText(e.description, 500), cleanText(e.language, 40), e.stars_total ?? null, e.forks ?? null);
         const res = insApp.run(
           e.full_name,
           snap.source,
@@ -356,9 +356,9 @@ export class Store {
         meta.full_name,
         meta.owner,
         meta.name,
-        meta.description,
-        meta.language,
-        JSON.stringify(meta.topics),
+        cleanText(meta.description, 500),
+        cleanText(meta.language, 40),
+        JSON.stringify(cleanTopics(meta.topics)),
         meta.stars,
         meta.forks,
         meta.created_at,
@@ -367,10 +367,10 @@ export class Store {
         meta.license_class,
         meta.open_core ? 1 : 0,
         meta.archived ? 1 : 0,
-        meta.homepage,
-        meta.latest_release,
+        cleanUrl(meta.homepage),
+        cleanText(meta.latest_release, 120),
         meta.latest_release_at,
-        meta.readme_excerpt,
+        cleanText(meta.readme_excerpt, 6000, { multiline: true }),
         meta.readme_hash,
         meta.enriched_at,
       );
@@ -389,7 +389,7 @@ export class Store {
   setSummary(fullName: string, input: { summary: string; business_use: string; source: "llm" | "heuristic"; hash: string }): void {
     this.db
       .prepare("UPDATE repos SET summary = ?, business_use = ?, summary_source = ?, summary_hash = ?, summary_at = ? WHERE full_name = ?")
-      .run(input.summary, input.business_use, input.source, input.hash, isoNow(), fullName);
+      .run(cleanText(input.summary, 600) ?? "", cleanText(input.business_use, 1200) ?? "", input.source, input.hash, isoNow(), fullName);
   }
 
   setCategory(fullName: string, category: CategoryId, source: CategorySource): void {
@@ -986,7 +986,9 @@ export class Store {
         if (!isFullName(r.full_name)) continue;
         const existing = this.getRepo(r.full_name);
         if (existing?.enriched_at && r.enriched_at && existing.enriched_at > r.enriched_at) continue;
-        this.upsertRepoMeta(r);
+        // Published shards carry no README text; keep the local copy when the README has not changed.
+        const excerpt = r.readme_excerpt ?? (existing && existing.readme_hash === r.readme_hash ? existing.readme_excerpt : null);
+        this.upsertRepoMeta({ ...r, readme_excerpt: excerpt });
         if (r.summary && r.business_use && r.summary_source && r.summary_hash) {
           this.setSummary(r.full_name, { summary: r.summary, business_use: r.business_use, source: r.summary_source, hash: r.summary_hash });
         }

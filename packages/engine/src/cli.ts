@@ -27,7 +27,8 @@ import { rankedList, repoView } from "./views.js";
  *   kinly shortlist owner/repo <status> [--note "..."]
  *   kinly rate owner/repo <1-5> [--notes "..."] [--verdict BUILD|WATCH|SKIP]
  *   kinly resource owner/repo [--test-log FILE]
- *   kinly publish [--message "..."]          push reports/data/resources to the public repo (needs GITHUB_TOKEN)
+ *   kinly publish [--message "..."] [--use-gh-token]   push data/, reports/, resources/ to KINLY_DATA_REPO (needs GITHUB_TOKEN;
+ *                                            --use-gh-token allows the owner's gh login for an attended run)
  *   kinly status
  */
 
@@ -91,7 +92,9 @@ async function main(argv: string[]): Promise<number> {
       case "status": {
         print({
           db: config.dbPath,
-          github: ctx.github.authenticated ? "token" : "keyless",
+          dataRoot: config.dataRoot,
+          dataRepo: config.dataRepo,
+          github: ctx.github.authenticated ? `token (${config.githubTokenSource})` : "keyless",
           llm: ctx.llm.available ? ctx.llm.model : "unavailable",
           llmTokensToday: ctx.llm.tokensUsedToday(),
           stats: store.stats(),
@@ -205,7 +208,7 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
       case "publish": {
-        print(await jobs.publishToRepo(ctx, { ...(flagStr(flags, "message") ? { message: flagStr(flags, "message") as string } : {}) }));
+        print(await jobs.publishToRepo(ctx, { allowGhToken: flags["use-gh-token"] === true, ...(flagStr(flags, "message") ? { message: flagStr(flags, "message") as string } : {}) }));
         return 0;
       }
       default:
