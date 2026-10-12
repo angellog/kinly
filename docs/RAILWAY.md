@@ -56,3 +56,16 @@ Check the result in this order:
 1. `/api/status` → `scheduler.last_daily_ok` equals today's date after 05:40 UTC.
 2. `recent_runs` has one row per stage: `collect`, `enrich`, `star-history`, `classify`, `score`, `report-daily`, `export`, `publish`.
 3. A missed day is caught up within the hour after a restart.
+
+## Adding the GitHub token (owner step)
+
+1. Go to https://github.com/settings/personal-access-tokens/new and create a **fine-grained** token:
+   - name `kinly-railway`;
+   - resource owner `angellog`;
+   - expiration 1 year, with a reminder to rotate it;
+   - **Only select repositories → `angellog/kinly-data`**;
+   - **Repository permissions → Contents: Read and write**. Leave everything else at No access. Read access to public repos is automatic.
+2. Put it on Railway without printing it. From `~/Projects/kinly`, with the token on the clipboard, run:
+   `railway variables --service kinly-api --set "GITHUB_TOKEN=$(pbpaste)"`.
+   Alternatively, use the dashboard: kinly → kinly-api → Variables.
+3. Check it: `/api/status` with the bearer token should show `credentials.github: present`. From then on, Railway is the only writer of `kinly-data`; see [WORKFLOW.md](WORKFLOW.md).

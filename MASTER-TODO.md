@@ -66,16 +66,16 @@ Loop rule: every item below must be ticked `[x]` before the loop stops. An item 
 - [x] R-j Language list capped at 10 + all, with a test; backoff on 429/5xx (R7)
 
 ## G. Verification and hand-off
-- [ ] G1 Final code-review workflow (correctness + security + cost lenses) and findings fixed
+- [x] G1 Final code-review workflow (correctness + security + cost lenses) and findings fixed
 - [x] G2 End-to-end: Paperclip page → Railway API → rate a repo → resource page appears in the repo
 - [x] G3 Obsidian: `Projects/kinly.md`, daily note, `Ongoing.md`, decision note
 - [x] G4 Memory file for Kinly written
-- [ ] G5 Hand-off message with the exact human steps
+- [x] G5 Hand-off message with the exact human steps
 
 ## Hand-off list (Angelo)
 - **(Angelo)** Approve the Kinly agent hire in **VAN** and **FEE** (Paperclip → Agents → Kinly → Approve). In GST and FEEA it already exists, paused; resume it where it should work.
 - **(Angelo)** Grant the Railway GitHub app access to `angellog/kinly` (github.com/settings/installations → Railway → Repository access → add `kinly`). Then push a docs-only commit and check `railway deployment list` shows it SKIPPED (watch patterns).
 - **(Angelo)** Rate `0xNyk/council-of-high-intelligence` in the Kinly console (GST-29 holds the agent's read-only test, 3/5) — the first owner rating closes the loop.
-- **(Angelo)** Mint a fine-grained GitHub PAT (public repos: read; `angellog/kinly-data` only: Contents read/write — never `angellog/kinly`) and set it on Railway as `GITHUB_TOKEN`
+- **(Angelo)** Mint a fine-grained GitHub PAT (`angellog/kinly-data` only, Contents read/write; never `angellog/kinly`) and set it on Railway as `GITHUB_TOKEN`. Exact steps: `docs/RAILWAY.md` → Adding the GitHub token
 - **(Angelo)** Mint a Kinly-only Anthropic key in its own Console workspace with a monthly spend limit and set it on Railway as `ANTHROPIC_API_KEY`
 - **(Angelo)** In Paperclip, allow `vantik.kinly:*` tools for the agents that should use them; resume the Kinly agent in the companies where it should work
