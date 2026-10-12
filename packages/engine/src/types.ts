@@ -56,6 +56,8 @@ export interface Snapshot {
   /** ISO timestamp when it was fetched or, for archives, when the archive recorded it. */
   fetched_at: string;
   entries: TrendingEntry[];
+  /** Identical to the previous day's list: archived as observed, never credited (E-M4b). */
+  stalled?: boolean;
 }
 
 export type LicenseClass =

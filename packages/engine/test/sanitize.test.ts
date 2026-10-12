@@ -40,3 +40,12 @@ describe("untrusted text (D15)", () => {
     s.close();
   });
 });
+
+describe("markdown in third-party text (review G1-sec6)", () => {
+  it("renders as text in reports: no images, links or headings", async () => {
+    const { plain } = await import("../src/reports/markdown.js");
+    const out = plain("![x](https://evil/p.png) [Setup](https://evil) # Heading");
+    assert.ok(!/!\[x\]\(/.test(out) && !/\[Setup\]\(/.test(out), out);
+    assert.match(out, /\\!\\\[x\\\]/);
+  });
+});

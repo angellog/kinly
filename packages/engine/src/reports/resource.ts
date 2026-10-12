@@ -1,7 +1,7 @@
 import type { RepoView } from "../types.js";
 import { isoNow } from "../util/dates.js";
-import { fmtInt } from "../util/text.js";
-import { categoryLabel, licenseLabel, repoLink, verdictBadge } from "./markdown.js";
+import { fmtInt, isFullName } from "../util/text.js";
+import { categoryLabel, licenseLabel, plain, repoLink, verdictBadge } from "./markdown.js";
 
 /** The resource page for one repo: what it is, why it trended, how to use it, how it tested. */
 export function resourcePage(v: RepoView, options: { generatedAt?: string; quickStart?: string | null; testLog?: string | null } = {}): string {
@@ -10,7 +10,7 @@ export function resourcePage(v: RepoView, options: { generatedAt?: string; quick
   const lines: string[] = [];
   lines.push(`# ${r.full_name}`);
   lines.push("");
-  lines.push(`> ${r.summary ?? r.description ?? "No description."}`);
+  lines.push(`> ${plain(r.summary ?? r.description, 600) || "No description."}`);
   lines.push("");
   lines.push(`| | |`);
   lines.push(`|---|---|`);
@@ -30,7 +30,7 @@ export function resourcePage(v: RepoView, options: { generatedAt?: string; quick
   lines.push("");
   lines.push(`## What it is`);
   lines.push("");
-  lines.push(r.summary ?? r.description ?? "_No summary yet._");
+  lines.push(plain(r.summary ?? r.description, 1200) || "_No summary yet._");
   lines.push("");
   lines.push(`## Why it trended`);
   lines.push("");
@@ -44,7 +44,7 @@ export function resourcePage(v: RepoView, options: { generatedAt?: string; quick
   lines.push("");
   lines.push(`## How Vantik Systems or FeetBit could use it`);
   lines.push("");
-  lines.push(r.business_use ?? "_Not written yet. Rate the repo after a test and Kinly will draft this section._");
+  lines.push(plain(r.business_use, 1200) || "_Not written yet. Rate the repo after a test and Kinly will draft this section._");
   lines.push("");
   lines.push(`## 15-minute quick start`);
   lines.push("");
@@ -104,5 +104,6 @@ export function resourcePage(v: RepoView, options: { generatedAt?: string; quick
 }
 
 export function resourceFileName(fullName: string): string {
+  if (!isFullName(fullName)) throw new Error(`not an owner/name: ${String(fullName).slice(0, 80)}`);
   return `${fullName.replace("/", "--")}.md`;
 }

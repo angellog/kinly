@@ -15,7 +15,11 @@ export class TokenBucket {
     const ok = b.tokens >= 1;
     if (ok) b.tokens -= 1;
     this.buckets.set(key, b);
-    if (this.buckets.size > 10_000) this.prune(t);
+    if (this.buckets.size > 10_000) {
+      this.prune(t);
+      // Hard cap: a flood of fresh keys cannot grow the map without bound (review G1-sec5).
+      if (this.buckets.size > 10_000) this.buckets.clear();
+    }
     return ok;
   }
 

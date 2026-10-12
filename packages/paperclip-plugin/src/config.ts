@@ -60,6 +60,16 @@ export function normalizeApiUrl(raw: unknown): string {
   }
 }
 
+/** Where the API token may be sent (review G1-sec7): the Kinly service, or loopback for local development. */
+export function tokenAllowedFor(apiUrl: string): boolean {
+  try {
+    const u = new URL(apiUrl);
+    return u.origin === new URL(DEFAULT_API_URL).origin || ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function parseConfig(raw: Record<string, unknown> | null | undefined): KinlyCompanyConfig {
   const r = raw ?? {};
   const assignee = typeof r["briefAssigneeAgentId"] === "string" && /^[0-9a-f-]{36}$/i.test(r["briefAssigneeAgentId"]) ? r["briefAssigneeAgentId"] : null;

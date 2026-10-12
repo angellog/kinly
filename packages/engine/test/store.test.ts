@@ -159,3 +159,46 @@ describe("aliases round trip", () => {
     b.close();
   });
 });
+
+describe("review G1 hardening (store)", () => {
+  it("search candidates are not trending: no days, weeks or persistence from gh-search-new", () => {
+    const s = new Store(":memory:");
+    for (const d of ["2026-10-01", "2026-10-08", "2026-10-15"]) s.ingestSnapshot(snap({ source: "gh-search-new", window: "monthly", list_date: d, entries: [{ full_name: "new/fast", rank: 1 }] }));
+    const sig = s.signals("new/fast");
+    assert.equal(sig.distinct_days, 0);
+    assert.equal(sig.distinct_weeks, 0);
+    assert.deepEqual(s.list("persistent", { date: "2026-10-15" }), []);
+    s.close();
+  });
+
+  it("the week that spans New Year counts once", () => {
+    const s = new Store(":memory:");
+    for (const d of ["2025-12-29", "2025-12-31", "2026-01-02", "2026-01-04"]) s.ingestSnapshot(snap({ list_date: d, entries: [{ full_name: "a/b", rank: 1 }] }));
+    assert.equal(s.signals("a/b").distinct_weeks, 1);
+    s.close();
+  });
+
+  it("an unenriched or older record never overwrites a newer one on import", () => {
+    const s = new Store(":memory:");
+    s.upsertRepoMeta(meta("a/b", { stars: 9000, license_class: "permissive", enriched_at: "2026-10-12T00:00:00Z" }));
+    s.setSummary("a/b", { summary: "LLM summary.", business_use: "Use.", source: "llm", hash: "h" });
+    s.importRepos([{ ...meta("a/b", { stars: null, license_class: "unknown", enriched_at: null }), summary: "Heuristic.", business_use: "Template.", summary_source: "heuristic", summary_hash: "h", category: "other", category_source: "rule", summary_at: "2026-10-13T00:00:00Z" } as never]);
+    const r = s.getRepo("a/b");
+    assert.equal(r?.stars, 9000);
+    assert.equal(r?.summary, "LLM summary.");
+    s.close();
+  });
+
+  it("pick memory and secrets: picks round-trip; token-shaped strings never reach a test log", () => {
+    const s = new Store(":memory:");
+    s.recordPicks("daily", "2026-10-12", ["a/b"]);
+    const t = new Store(":memory:");
+    assert.equal(t.importPicks(s.listPicks()), 1);
+    assert.ok(t.pickedBetween("2026-10-01", "2026-10-13").has("a/b"));
+    t.setAgentRating("a/b", { rating: 3, test_log: "env: GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz123456 and sk-ant-api03-abcdefghijklmnop" });
+    const log = t.getAgentRating("a/b")?.test_log ?? "";
+    assert.ok(!/ghp_|sk-ant-/.test(log), log);
+    s.close();
+    t.close();
+  });
+});

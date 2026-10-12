@@ -1,7 +1,7 @@
 import type { RepoView } from "../types.js";
 import { CATEGORY_LABELS } from "../classify/rules.js";
 import { LICENSE_CLASS_LABEL } from "../github/license.js";
-import { cell, fmtInt, truncate } from "../util/text.js";
+import { cell, escapeMarkdown, fmtInt, truncate } from "../util/text.js";
 
 /** Shared markdown helpers for every report. Deterministic: no timestamps except the ones passed in. */
 
@@ -33,13 +33,18 @@ export function categoryLabel(id: RepoView["repo"]["category"]): string {
   return CATEGORY_LABELS[id] ?? id;
 }
 
+/** Third-party (or model-written) text, shown as text: truncated, then markdown-escaped. */
+export function plain(text: string | null | undefined, max = 600): string {
+  const t = truncate(text ?? "", max);
+  return t ? escapeMarkdown(t) : "";
+}
+
 export function oneLiner(v: RepoView, max = 140): string {
-  const text = v.repo.summary ?? v.repo.description ?? "";
-  return truncate(text, max) || "—";
+  return plain(v.repo.summary ?? v.repo.description, max) || "—";
 }
 
 export function businessUse(v: RepoView, max = 220): string {
-  return v.repo.business_use ? truncate(v.repo.business_use, max) : "—";
+  return plain(v.repo.business_use, max) || "—";
 }
 
 /** The standard ranked table used by every list. */
@@ -67,9 +72,9 @@ export function pickBlock(v: RepoView & { rank?: number; metric_label?: string }
   lines.push("");
   lines.push(`**${categoryLabel(v.repo.category)}** · ${fmtInt(v.repo.stars)} stars · ${licenseLabel(v)} · Kinly score **${v.score.total}** · verdict **${verdictBadge(v)}** · relevance ${v.relevance}/100${v.metric_label ? ` · ${v.metric_label}` : ""}`);
   lines.push("");
-  lines.push(`**What it does.** ${v.repo.summary ?? v.repo.description ?? "No description yet."}`);
+  lines.push(`**What it does.** ${plain(v.repo.summary ?? v.repo.description, 600) || "No description yet."}`);
   lines.push("");
-  lines.push(`**How you could use it.** ${v.repo.business_use ?? "Not written yet — rate it after a test and Kinly will draft the resource page."}`);
+  lines.push(`**How you could use it.** ${plain(v.repo.business_use, 800) || "Not written yet — rate it after a test and Kinly will draft the resource page."}`);
   lines.push("");
   lines.push(`**Why it scores this way.** ${v.score.reasons.join(" · ")}`);
   if (v.signals.first_seen) lines.push(`\n_Trending history: first seen ${v.signals.first_seen}, last seen ${v.signals.last_seen}, ${v.signals.distinct_days} day(s) across ${v.signals.distinct_weeks} week(s)._`);

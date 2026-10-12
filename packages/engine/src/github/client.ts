@@ -100,8 +100,14 @@ export class GitHubClient {
     into.used++;
   }
 
+  /** A window whose reset time has passed is a fresh window: forget the old count (review G1-ops1). */
+  private refresh(state: RateState): void {
+    if (state.reset !== null && state.remaining !== null && Date.now() / 1000 >= state.reset) state.remaining = null;
+  }
+
   /** Wait for the window to reset when we are at the reserve, or throw if the wait is too long. */
   private async gate(state: RateState): Promise<void> {
+    this.refresh(state);
     if (state.remaining === null || state.remaining > this.reserve) return;
     const now = Math.floor(Date.now() / 1000);
     const waitMs = state.reset ? Math.max(0, (state.reset - now) * 1000 + 1000) : this.maxWaitMs + 1;
@@ -114,6 +120,7 @@ export class GitHubClient {
   /** Remaining budget above the reserve, or Infinity when unknown. */
   budget(kind: "core" | "graphql" | "search" = "core"): number {
     const s = kind === "graphql" ? this.graphqlRate : kind === "search" ? this.searchRate : this.rate;
+    this.refresh(s);
     return s.remaining === null ? Number.POSITIVE_INFINITY : Math.max(0, s.remaining - this.reserve);
   }
 

@@ -204,7 +204,10 @@ export async function enrichRepos(client: GitHubClient, names: readonly string[]
         });
         log(`enriched ${Math.min(i + GRAPHQL_BATCH, unique.length)}/${unique.length} (graphql)`);
       } catch (err) {
-        if (err instanceof RateLimitExhausted) {
+        // Throttled (403/429, or GraphQL RATE_LIMITED): stop and leave the rest for the next run — fanning out to REST is
+        // exactly the wrong response to "slow down" (review G1-ops6).
+        const throttled = err instanceof RateLimitExhausted || (err instanceof GitHubHttpError && (err.status === 403 || err.status === 429 || /rate.?limit/i.test(err.message)));
+        if (throttled) {
           result.skipped.push(...unique.slice(i));
           break;
         }

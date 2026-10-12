@@ -31,13 +31,20 @@ You run this protocol when an issue asks you to test a repository (the console's
    ```bash
    docker run --rm -it --network bridge --name kinly-test node:24 bash        # or python:3.13
    ```
-   Mount no host directories and pass in no environment variables or `.env` files. If Docker is not available, stop and say so; do not fall back to the host.
+   Mount no host directories and pass in no environment variables or `.env` files.
+   **If Docker is not available**, you may do a *read-only review* and nothing more:
+   - clone with hooks disabled (`git -c core.hooksPath=/dev/null clone --depth 1 …`) into a scratch directory, never into a project folder;
+   - read the README, manifests and scripts;
+   - run nothing from the repository: no install, no build, no script.
+
+   Say "read-only review" in the test log. Anything that needs running waits for a container.
 2. **Fetch without running anything.** Run `git clone --depth 1 https://github.com/<owner>/<repo>` inside the container. Read the README's quick start, the `package.json` scripts, any `setup.py` or `pyproject` build hooks, any `Makefile`, and any install scripts.
 3. **Install with scripts off first:** `npm install --ignore-scripts`, or `pip install --no-deps -r requirements.txt`. Re-enable lifecycle scripts only after you have read them and they do nothing beyond building the project.
 4. **Try it on a real artefact** from the business: a carousel brief, an Instagram caption, a sneaker photo description, or a client question. Do not use only the README's toy example. Stop at about 15 minutes. If it is not working by then, that is a finding.
-5. **Record the result** with `vantik.kinly:rate`, giving a rating from 1 to 5, a one-line verdict and a test log. The test log lists the exact commands you ran, the container image, what worked, what failed, and how many minutes it took. Your rating is the **agent** rating. It moves the repository to `testing`. Only the owner's own rating moves it to `rated`.
-6. **Hand back.** Comment on the issue with your verdict and what the repository would replace or enable. Then ask the owner for their rating.
-7. **After the owner rates it,** call `vantik.kinly:resource` to publish the resource page.
+5. **Test logs are public.** They are published to the API and to the public `angellog/kinly-data` repository. Never put environment variables, credentials, host paths outside the scratch directory, or the contents of any file that is not part of the repository under test in a log.
+6. **Record the result** with `vantik.kinly:rate`, giving a rating from 1 to 5, a one-line verdict and a test log. The test log lists the exact commands you ran, the container image, what worked, what failed, and how many minutes it took. Your rating is the **agent** rating. It moves the repository to `testing`. Only the owner's own rating moves it to `rated`.
+7. **Hand back.** Comment on the issue with your verdict and what the repository would replace or enable. Then ask the owner for their rating.
+8. **After the owner rates it,** call `vantik.kinly:resource` to publish the resource page.
 
 Never install a repository into a real workspace, never publish anything to social media, and never push to any repository. All of these need the owner's explicit approval in the issue thread.
 

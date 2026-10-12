@@ -55,9 +55,12 @@ describe("api", () => {
     const h = await get("/api/health");
     assert.equal(h.status, 200);
     assert.equal(((await h.json()) as { ok: boolean }).ok, true);
-    const s = (await (await get("/api/status")).json()) as { credentials: Record<string, string>; stats: { repos: number } };
+    const pub = (await (await get("/api/status")).json()) as { credentials?: unknown; stats: { repos: number }; recent_runs?: unknown };
+    assert.equal(pub.stats.repos, 2);
+    assert.equal(pub.credentials, undefined, "credential state is not public");
+    assert.equal(pub.recent_runs, undefined, "run errors are not public");
+    const s = (await (await get("/api/status", { authorization: `Bearer ${TOKEN}` })).json()) as { credentials: Record<string, string> };
     assert.deepEqual(s.credentials, { github: "absent", anthropic: "absent" });
-    assert.equal(s.stats.repos, 2);
   });
 
   it("serves trending with cache headers and validates parameters", async () => {
@@ -136,5 +139,27 @@ describe("api details", () => {
   it("finds category matches beyond the first candidates", async () => {
     const r = (await (await get("/api/trending?window=today&date=2026-10-08&category=mcp-tools&limit=5")).json()) as { items: Array<{ repo: { full_name: string } }> };
     assert.deepEqual(r.items.map((i) => i.repo.full_name), ["acme/mcp-instagram"]);
+  });
+});
+
+describe("review G1 hardening", () => {
+  it("export defaults to the owner bundle; the full store needs ?full=1", async () => {
+    const light = (await (await get("/api/export", { authorization: `Bearer ${TOKEN}` })).json()) as Record<string, unknown>;
+    assert.ok("shortlist" in light && "resources" in light && !("appearances" in light));
+    const full = (await (await get("/api/export?full=1", { authorization: `Bearer ${TOKEN}` })).json()) as Record<string, unknown>;
+    assert.ok(Array.isArray(full["appearances"]));
+  });
+
+  it("jobs run in the background and refuse a past date for collect", async () => {
+    assert.equal((await post("/api/jobs/run", { job: "collect", date: "2020-01-01" })).status, 400);
+    const r = await post("/api/jobs/run", { job: "score" });
+    assert.equal(r.status, 202);
+    assert.equal(((await r.json()) as { accepted: boolean }).accepted, true);
+  });
+
+  it("keys the rate limit on the hop the proxy appended, not the one the client sent", async () => {
+    const { clientIp } = await import("../src/api.js");
+    const fake = { headers: { "x-forwarded-for": "6.6.6.6, 203.0.113.9" }, socket: { remoteAddress: "10.0.0.1" } } as never;
+    assert.equal(clientIp(fake), "203.0.113.9");
   });
 });

@@ -53,7 +53,7 @@ node packages/engine/dist/src/cli.js show vllm-project/vllm
 Run the API locally:
 
 ```bash
-KINLY_API_TOKEN=dev KINLY_SCHEDULER=off node packages/server/dist/src/main.js
+KINLY_API_TOKEN=$(openssl rand -hex 24) KINLY_SCHEDULER=off node packages/server/dist/src/main.js   # binds 127.0.0.1 locally; tokens under 32 chars disable writes
 curl 'http://localhost:8787/api/trending?window=week&limit=5'
 ```
 

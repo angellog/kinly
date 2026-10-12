@@ -64,7 +64,8 @@ export function dailySeries(weeks: readonly StarWeek[], asOf: string): Array<{ d
 
 /** Stars over the last seven observed days, and the per-day average; null without data. */
 export function sevenDay(weeks: readonly StarWeek[], asOf: string): { stars7d: number; perDay: number } | null {
-  const s = dailySeries(weeks, asOf);
+  // The fetch day is still in progress; the last seven *complete* days end the day before (review G1-cor12).
+  const s = dailySeries(weeks, addDays(asOf, -1));
   if (s.length < 2) return null;
   const last = s.slice(-7);
   const total = last.reduce((a, d) => a + d.stars, 0);

@@ -11,7 +11,7 @@ The base URL is the Railway service, for example `https://kinly-api-production.u
 | Route | Parameters | Returns |
 |---|---|---|
 | `GET /api/health` | — | `{ ok, service, version, started_at }` |
-| `GET /api/status` | — | Credential states (`present`, `absent` or `rejected`), LLM usage, scheduler state, store stats, recent runs |
+| `GET /api/status` | — | Public: `ok`, `started_at`, `last_daily_ok`, `last_weekly_ok` and store stats. **With the bearer token** it adds credential states (`present`, `absent` or `rejected`), LLM usage, scheduler state and recent runs |
 | `GET /api/trending` | `window` = `today`, `week`, `month`, `persistent`, `rising` or `new` (`daily`, `weekly` and `monthly` are also accepted); `category`; `limit` ≤ 100; `min_relevance`; `date` | `{ window, date, count, items: RepoView[] }` |
 | `GET /api/repos` | `q`, `category`, `verdict`, `sort` (`score`, `relevance`, `stars`, `recent`, `name`), `starred`, `shortlisted`, `limit` ≤ 100, `offset` | `{ total, items }` |
 | `GET /api/repos/:owner/:name` | — | A RepoView plus `appearances`, `star_weeks` and `resource` |
@@ -22,7 +22,7 @@ The base URL is the Railway service, for example `https://kinly-api-production.u
 | `GET /api/reports/latest` | `kind` (default `daily`) | `{ kind, id, generated_at, markdown }` |
 | `GET /api/reports/:kind/:id` | — | One report |
 | `GET /api/resources` | — | Resource page index |
-| `GET /api/export` | **bearer** | The whole store, without README text |
+| `GET /api/export` | **bearer** | Owner state and pages (`shortlist`, `ratings`, `agent_ratings`, `aliases`, `picks`, `resources`), which is what `kinly pull` reads. Add `?full=1` for the whole store, without README text |
 
 A **RepoView** has these fields:
 
@@ -41,6 +41,6 @@ A **RepoView** has these fields:
 | `POST /api/repos/:o/:n/resource` | `{ test_log? }` | Writes the resource page and moves `rated` to `resourced` |
 | `POST /api/ask` | `{ question }` | An answer from the database (LLM, capped). Without a key, returns the closest repositories |
 | `POST /api/research` | `{ topic?, category? }` | A ranked list plus a synthesis |
-| `POST /api/jobs/run` | `{ job, date? }`, where `job` is `daily`, `weekly`, `collect`, `enrich`, `score`, `star-history`, `export`, `publish` or `import` (re-sync from the data repo) | Runs one job. Answers `409` while another is running |
+| `POST /api/jobs/run` | Answers **202** and runs in the background; the outcome appears in `/api/status` `recent_runs`. `daily` and `collect` only run for today. Answers 503 while a fresh store is still being rebuilt. Body: `{ job, date? }`, where `job` is `daily`, `weekly`, `collect`, `enrich`, `score`, `star-history`, `export`, `publish` or `import` (re-sync from the data repo) | Runs one job. Answers `409` while another is running |
 
 Errors look like `{ "error": "…" }`, with status `400`, `401`, `404`, `409`, `413`, `429`, `503` (writes are off because no token is set), or `500`.

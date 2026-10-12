@@ -116,3 +116,16 @@ export function cleanTopics(topics: readonly string[] | null | undefined): strin
   }
   return out;
 }
+
+// Token-shaped strings that must never reach a public page or repo (review G1-sec4).
+const SECRET_RE = /\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9]{20,}|ak_[A-Za-z0-9]{16,}|xox[abp]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})\b|\b([A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD))\s*[=:]\s*\S+|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)/g;
+
+export function redactSecrets(text: string | null | undefined): string | null {
+  if (text === null || text === undefined) return null;
+  return text.replace(SECRET_RE, (m, _tok, name) => (name ? `${name}=[redacted]` : "[redacted]"));
+}
+
+/** Escape markdown so third-party text renders as text: no links, images, emphasis or headings (review G1-sec6). */
+export function escapeMarkdown(text: string): string {
+  return text.replace(/[\\`*_{}\[\]()#+!<>|~]/g, (c) => `\\${c}`);
+}

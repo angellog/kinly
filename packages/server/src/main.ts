@@ -27,7 +27,13 @@ function makeLock() {
 }
 
 async function main(): Promise<void> {
+  // A server never borrows the owner's gh CLI login unless asked (D5, review G1-sec8).
+  if (process.env["KINLY_ALLOW_GH_TOKEN"] !== "1") process.env["KINLY_NO_GH_FALLBACK"] = "1";
   const config = loadConfig();
+  if (config.apiToken && config.apiToken.length < 32) {
+    log("KINLY_API_TOKEN is shorter than 32 characters: writes are disabled until a stronger token is set");
+    config.apiToken = null;
+  }
   const store = new Store(config.dbPath);
   const ctx = jobs.makeContext(store, config, { log });
   const lock = makeLock();
@@ -47,24 +53,37 @@ async function main(): Promise<void> {
     },
   });
 
-  const handler = createApi({ ctx, scheduler, runExclusive: lock, version: process.env["RAILWAY_GIT_COMMIT_SHA"]?.slice(0, 7) ?? "0.1.0" });
+  let ready = false;
+  const handler = createApi({ ctx, scheduler, runExclusive: lock, isReady: () => ready, version: process.env["RAILWAY_GIT_COMMIT_SHA"]?.slice(0, 7) ?? "0.1.0" });
   const server = createServer((req, res) => void handler(req, res));
   server.requestTimeout = 120_000;
-  server.listen(config.port, "0.0.0.0", () => log(`listening on :${config.port}`));
+  // On Railway (or with KINLY_HOST) listen publicly; a local run stays on loopback.
+  const host = process.env["KINLY_HOST"] ?? (process.env["RAILWAY_ENVIRONMENT"] ? "0.0.0.0" : "127.0.0.1");
+  server.listen(config.port, host, () => log(`listening on ${host}:${config.port}`));
 
   // Listen first so the platform healthcheck passes; rebuild an empty store from the data repo in the background (D3),
   // and only then start the scheduler, so a catch-up run never races the import.
+  // Listen first so the platform healthcheck passes. A fresh store is rebuilt from the data repo, all or nothing,
+  // retried until it succeeds; until then the scheduler does not start, API jobs answer 503, and export refuses
+  // to write (review G1-cor1, G1-cor5).
   void (async () => {
-    if (store.stats().appearances === 0 && process.env["KINLY_BOOT_IMPORT"] !== "off") {
+    if (store.stats().appearances === 0 && process.env["KINLY_BOOT_IMPORT"] !== "off") store.setMeta(jobs.IMPORT_PENDING, "1");
+    for (let attempt = 1; store.getMeta(jobs.IMPORT_PENDING) === "1"; attempt++) {
       try {
-        const fetched = await jobs.fetchDataFromRepo(ctx);
-        const imported = jobs.importData(ctx);
-        log(`boot import: ${fetched.files} files fetched, ${imported.repos} repos, ${imported.snapshots} snapshot files, ${imported.appearances} appearances`);
-        jobs.scoreAll(ctx, jobs.loadProfile(ctx));
+        await lock("boot-import", async () => {
+          const fetched = await jobs.fetchDataFromRepo(ctx);
+          const imported = jobs.importData(ctx);
+          jobs.scoreAll(ctx, jobs.loadProfile(ctx));
+          store.setMeta(jobs.IMPORT_PENDING, "0");
+          log(`boot import: ${fetched.empty ? "empty data repo" : `${fetched.files} files`}, ${imported.repos} repos, ${imported.snapshots} snapshot files, ${imported.appearances} appearances, ${imported.reports} reports`);
+        });
       } catch (err) {
-        log(`boot import failed (the scheduler will collect fresh data): ${err instanceof Error ? err.message : String(err)}`);
+        const wait = Math.min(30, 2 ** attempt) * 60_000;
+        log(`boot import attempt ${attempt} failed (${err instanceof Error ? err.message : String(err)}); retrying in ${wait / 60_000} min`);
+        await new Promise((r) => setTimeout(r, wait));
       }
     }
+    ready = true;
     if (!schedulerOff) scheduler.start();
     else log("scheduler off (KINLY_SCHEDULER=off)");
   })();

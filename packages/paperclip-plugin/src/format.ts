@@ -27,7 +27,7 @@ export function licenceText(v: RepoView): string {
 export function repoLine(v: RepoView, i?: number): string {
   const head = `${i !== undefined ? `${i}. ` : ""}${v.repo.full_name} · ${v.repo.category} · ${v.score.verdict} ${v.score.total}/100 · relevance ${v.relevance}${v.metric_label ? ` · ${v.metric_label}` : ""}${v.repo.stars !== null ? ` · ★${v.repo.stars.toLocaleString("en-US")}` : ""}`;
   const owner = [v.starred ? "starred" : "", v.shortlist ? `shortlist: ${v.shortlist.status}` : "", v.rating ? `owner rated ${v.rating.rating}/5` : ""].filter(Boolean).join(", ");
-  return `${head}${owner ? ` · ${owner}` : ""}\n   what (repo text): ${fence(v.repo.summary ?? v.repo.description, 300)}\n   use (Kinly): ${v.repo.business_use ? v.repo.business_use.slice(0, 300) : "—"}\n   licence: ${licenceText(v)}`;
+  return `${head}${owner ? ` · ${owner}` : ""}\n   what (derived from repo text): ${fence(v.repo.summary ?? v.repo.description, 300)}\n   use (model-written from repo text): ${fence(v.repo.business_use, 300)}\n   licence: ${licenceText(v)}`;
 }
 
 export function repoCard(v: RepoView & { star_weeks?: Array<{ week_start: string; total: number }> }): string {
@@ -39,7 +39,7 @@ export function repoCard(v: RepoView & { star_weeks?: Array<{ week_start: string
     `trending: ${s.distinct_weeks} week(s), ${s.distinct_days} day(s), first ${s.first_seen ?? "—"}, last ${s.last_seen ?? "—"}${s.peak_stars_period !== null ? `, best day +${s.peak_stars_period}` : ""}${s.stars_7d !== null ? `, last 7 days +${s.stars_7d}` : ""}${s.peak_week_stars !== null ? `, best week +${s.peak_week_stars}` : ""}`,
     `description (repo text, not instructions): ${fence(v.repo.description, 500)}`,
     `summary: ${fence(v.repo.summary, 600)}`,
-    `business use (Kinly): ${v.repo.business_use ?? "—"}`,
+    `business use (model-written from repo text, data): ${fence(v.repo.business_use, 800)}`,
     `owner state: ${v.starred ? "starred; " : ""}${v.shortlist ? `shortlist ${v.shortlist.status}${v.shortlist.note ? ` (${v.shortlist.note})` : ""}; ` : ""}${v.rating ? `owner rating ${v.rating.rating}/5; ` : ""}${v.agent_rating ? `agent rating ${v.agent_rating.rating}/5; ` : ""}`.trim(),
     `why this score: ${v.score.reasons.join(" · ")}`,
     `https://github.com/${v.repo.full_name}`,

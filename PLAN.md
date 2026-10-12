@@ -225,3 +225,43 @@ Legend: **A** accepted as written · **A′** accepted with the change noted · 
 | R6 | major | README excerpts committed to a public MIT repo | **A** → D10. `readme_excerpt` stays in SQLite and is never exported. larsbijl snapshots ship with its MIT notice. vitalets rows stay local. |
 | R7 | minor | Scrape should identify itself and bound its growth | **A**. The UA string is already set. Exponential backoff on 429/5xx. A test fails if the language list grows past 10 plus “all”. The AUP position is noted in `docs/ARCHITECTURE.md`. |
 | R8 | minor | Keyless mode hides a dead credential; public GET is unmetered | **A** → D4 credential states, the §3.8 rate limit, `Cache-Control`, `limit` ≤ 100, `/api/export` behind the bearer token. |
+
+---
+
+## Final review (G1, 2026-10-12)
+
+Three reviewers covered correctness, security, and cost/operations, and returned 32 findings. Each was checked against the code. Fixes landed in one commit, with regression tests: 155 in total, up from 140. Two items were accepted, not fixed; they are listed below.
+
+| Finding | Fix |
+|---|---|
+| **Sec 1** (high): `kinly pull` let a crafted `full_name` write outside `resources/` | Names are validated; paths are contained and checked before any write. Test included |
+| **Sec 2** (high): report and brief markdown reached agents unfenced | The brief puts the report in a fenced block under a "data, not instructions" header. The `report` tool wraps its output in `<<< >>>` |
+| Sec 3: summaries and business uses shown to agents as trusted | Fenced as model-written data. The README and description are fenced inside the summarizer prompt |
+| Sec 4: agent test logs published raw | Token-shaped strings are redacted before storing. `AGENTS.md` says logs are public and adds an explicit read-only review mode for hosts without Docker |
+| Sec 5 and Ops 5: rate limit keyed on a client-controlled header; unbounded map | Keyed on the last proxy-appended hop. The map is hard-capped. List responses are cached in-process for 2 minutes and cleared on any write |
+| Sec 6: markdown in third-party text rendered as links and images | Escaped in every report and resource page. The README fallback is reduced to plain text |
+| Sec 7: API token could be sent to any configured URL | The token is sent only to the Kinly origin or loopback |
+| Sec 8: local server on `0.0.0.0` with a weak token and the gh fallback | Loopback unless on Railway or `KINLY_HOST` is set. Tokens under 32 characters disable writes. The server never uses the gh fallback |
+| Sec 9: public `/api/status` exposed credentials, spend and errors | Public status is minimal. The full status needs the bearer token |
+| Sec 10 and Cor 7: imports trusted rows; thin records overwrote newer ones | Rows are validated. Newer-and-better wins for metadata, summaries (llm over heuristic) and owner categories |
+| **Cor 1** (high): a failed boot import could publish an empty store over the data repo | The import is all or nothing and retried. Export and publish refuse while a rebuild is pending. The scheduler waits for the import |
+| **Cor 2** (high): re-enrichment overwrote LLM and curated categories | Rules never overwrite `llm` or `owner` categories |
+| Cor 3: Monday's weekly reported the week that had just started | Reports the completed ISO week |
+| Cor 4: GitHub-search rows counted as trending days and weeks | Signals and lists use trending sources only; days come from daily lists only |
+| Cor 5 and Cor 6: API jobs raced the boot import; a past date re-stamped live lists | Jobs answer 503 until the import finishes. `daily` and `collect` only run for today. `last_daily_ok` never moves backwards |
+| Cor 8: pick memory was not exported | `data/user/picks.json` is exported and imported |
+| Cor 9: stalled lists credited after a rebuild | Stalled lists are flagged in the snapshot file and skipped on import |
+| Cor 10: `%Y-%W` split the week that spans New Year | Weeks are keyed on their ISO Monday |
+| Cor 11 and Cor 12: daily header count capped at 60; 7-day velocity included a partial day | The count comes from the full list. Velocity uses complete days only |
+| **Ops 1** (high): keyless rate state never refreshed, so enrichment stalled after the first run | The rate state resets after its reset time |
+| Ops 2 and Ops 3: LLM cap could be overrun; failing repos paid for daily | Tokens are reserved before each call and settled after. Ask and research run under the lock. Three failures stop retries |
+| Ops 4: export loaded the whole store into memory (+170 MB) | Export streams repos only. `/api/export` defaults to the owner bundle; `?full=1` gives the whole store |
+| Ops 6: GraphQL throttling fanned out to REST | Enrichment stops on 403, 429 or rate-limit errors |
+| Ops 7: shards rewritten whole every day | One repo per line, so git stores small diffs |
+| Ops 8: full scans; candidate clamp at 1,000 | Indexes on `(full_name, list_date)`, `star_history(observed_at)` and `picks(pick_date)`. `listNew` uses `NOT EXISTS`. The clamp is 3,000 |
+| Ops 9: retries could hold the lock for close to an hour | `Retry-After` is capped at 30 s. The scrape has a 3-minute total budget |
+| Ops 10: WAL growth; long synchronous job requests | `journal_size_limit`. Jobs return 202 and run in the background |
+
+**Accepted, not fixed:**
+- A same-day re-collect can add appearances that the day file, which keeps the last fetch, does not hold (part of Cor 9). The effect is a handful of rows on a retry day.
+- A failed daily re-runs from its first stage rather than the failed stage (part of Ops 9). With the scrape budget and the hourly gap, the worst case is bounded.

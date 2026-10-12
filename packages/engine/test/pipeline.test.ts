@@ -149,3 +149,31 @@ describe("pull from server", () => {
     store.close();
   });
 });
+
+describe("review G1 hardening (engine)", () => {
+  it("a boot import that cannot fetch a listed file fails instead of half-importing", async () => {
+    const files: Record<string, string> = { "data/manifest.json": JSON.stringify({ files: ["data/user/shortlist.json"] }) };
+    const flaky = (async (input: string | URL | Request) => {
+      const key = String(input).replace("https://raw.githubusercontent.com/angellog/kinly-data/main/", "");
+      return key in files ? new Response(files[key], { status: 200 }) : new Response("boom", { status: 503 });
+    }) as typeof fetch;
+    const { ctx, store } = context(flaky);
+    await assert.rejects(jobs.fetchDataFromRepo(ctx, { fetchImpl: flaky }), /could not fetch data\/user\/shortlist.json/);
+    store.setMeta(jobs.IMPORT_PENDING, "1");
+    assert.throws(() => jobs.exportData(ctx), /still being rebuilt/);
+    store.close();
+  });
+
+  it("pull refuses names that would escape the resources folder", async () => {
+    const bundle = { exported_at: "x", shortlist: [], ratings: [], agent_ratings: [], aliases: [], picks: [], resources: [{ full_name: "../../../../.claude/CLAUDE", generated_at: "2026-10-12T00:00:00Z", markdown: "pwned" }] };
+    const server = (async () => new Response(JSON.stringify(bundle), { status: 200 })) as typeof fetch;
+    const { ctx, store } = context(offlineGitHub);
+    assert.equal((await jobs.pullFromServer(ctx, { url: "https://kinly.test", token: "t", fetchImpl: server })).resources, 0);
+    store.close();
+  });
+
+  it("Monday's weekly covers the week that just ended", () => {
+    assert.equal(jobs.completedWeekEnd("2026-10-12"), "2026-10-11");
+    assert.equal(jobs.completedWeekEnd("2026-10-14"), "2026-10-11");
+  });
+});

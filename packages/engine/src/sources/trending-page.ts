@@ -88,6 +88,8 @@ export interface FetchTrendingOptions {
   retries?: number;
   /** Pause between page fetches in fetchAllTrending (default 900 ms). */
   delayMs?: number;
+  /** Total time budget for fetchAllTrending (default 3 min); pages past it are reported as failures (review G1-ops9). */
+  maxTotalMs?: number;
 }
 
 /** Fetch and parse one live trending list. */
@@ -101,7 +103,7 @@ export async function fetchTrending(window: Window, language = "all", options: F
       const res = await fetchImpl(url, { headers: { "user-agent": USER_AGENT, accept: "text/html" }, redirect: "follow" });
       if (res.status === 429 || res.status >= 500) {
         const retryAfter = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
-        throw Object.assign(new Error(`HTTP ${res.status} from ${url}`), { retryAfterMs: Number.isFinite(retryAfter) ? Math.min(retryAfter, 120) * 1000 : null });
+        throw Object.assign(new Error(`HTTP ${res.status} from ${url}`), { retryAfterMs: Number.isFinite(retryAfter) ? Math.min(retryAfter, 30) * 1000 : null });
       }
       if (!res.ok) throw new TrendingParseError(`HTTP ${res.status} from ${url}`);
       const html = await res.text();
@@ -134,12 +136,17 @@ export async function fetchAllTrending(options: FetchTrendingOptions & { languag
   const windows = options.windows ?? (["daily", "weekly", "monthly"] as const);
   const languages = (options.languages ?? TRENDING_LANGUAGES).slice(0, MAX_TRENDING_LANGUAGES);
   const delayMs = options.delayMs ?? 900;
+  const deadline = Date.now() + (options.maxTotalMs ?? 180_000);
   const snapshots: Snapshot[] = [];
   const failures: Array<{ window: Window; language: string; error: string }> = [];
   const jobs: Array<{ window: Window; language: string }> = [];
   for (const w of windows) jobs.push({ window: w, language: "all" });
   for (const l of languages) jobs.push({ window: "daily", language: l });
   for (const job of jobs) {
+    if (Date.now() > deadline) {
+      failures.push({ window: job.window, language: job.language, error: "skipped: scrape time budget spent" });
+      continue;
+    }
     try {
       snapshots.push(await fetchTrending(job.window, job.language, options));
     } catch (err) {

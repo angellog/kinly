@@ -27,7 +27,7 @@ import {
   type Window,
 } from "../types.js";
 import { addDays, isoNow, monthStart, weekStart } from "../util/dates.js";
-import { cleanText, cleanTopics, cleanUrl, isFullName } from "../util/text.js";
+import { cleanText, cleanTopics, cleanUrl, isFullName, redactSecrets } from "../util/text.js";
 
 type Row = Record<string, SQLInputValue>;
 
@@ -90,6 +90,7 @@ export interface ExportBundle {
   ratings: Rating[];
   agent_ratings?: AgentRating[];
   aliases?: Array<{ from_name: string; to_name: string }>;
+  picks?: Array<{ full_name: string; kind: string; pick_date: string }>;
   reports: Array<{ kind: string; id: string; generated_at: string; markdown: string }>;
   resources: Array<{ full_name: string; generated_at: string; markdown: string }>;
   meta: Record<string, string>;
@@ -194,7 +195,8 @@ export class Store {
     this.path = file;
     if (file !== ":memory:") mkdirSync(path.dirname(file), { recursive: true });
     this.db = new DatabaseSync(file);
-    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;");
+    // journal_size_limit keeps the WAL from staying at its largest-ever size (review G1-ops10).
+    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON; PRAGMA journal_size_limit = 67108864;");
     this.migrate();
   }
 
@@ -519,10 +521,13 @@ export class Store {
     const from = since ?? "0000-00-00";
     const agg = this.db
       .prepare(
-        `SELECT COUNT(*) AS n, COUNT(DISTINCT list_date) AS days, COUNT(DISTINCT strftime('%Y-%W', list_date)) AS weeks,
+        // Trending lists only: GitHub-search candidates are not "on trending" (review G1-cor4). Weeks are keyed by their
+        // ISO Monday so the week that spans New Year counts once (review G1-cor10).
+        `SELECT COUNT(*) AS n, COUNT(DISTINCT CASE WHEN window = 'daily' THEN list_date END) AS days,
+                COUNT(DISTINCT date(list_date, 'weekday 0', '-6 days')) AS weeks,
                 MIN(list_date) AS first_seen, MAX(list_date) AS last_seen, MAX(CASE WHEN window = 'daily' THEN stars_period END) AS peak,
                 GROUP_CONCAT(DISTINCT source) AS sources
-         FROM appearances WHERE full_name = ? AND list_date >= ?`,
+         FROM appearances WHERE full_name = ? AND list_date >= ? AND source != 'gh-search-new'`,
       )
       .get(fullName, from) as Row;
     return {
@@ -604,7 +609,7 @@ export class Store {
    */
   list(kind: ListKind, options: { date?: string; limit?: number; since?: string } = {}): ListRow[] {
     if (!LIST_KINDS.includes(kind)) throw new Error(`unknown list kind: ${kind}`);
-    const limit = Math.max(1, Math.min(1000, options.limit ?? 100));
+    const limit = Math.max(1, Math.min(3000, options.limit ?? 100));
     const date = options.date ?? this.latestListDate("daily") ?? this.latestListDate("weekly") ?? this.latestListDate("monthly");
     if (!date) return [];
     switch (kind) {
@@ -658,7 +663,7 @@ export class Store {
                 MAX(stars_period) AS sp,
                 MIN(rank) AS r
          FROM appearances
-         WHERE list_date BETWEEN ? AND ? AND window IN ('daily', ?)
+         WHERE list_date BETWEEN ? AND ? AND window IN ('daily', ?) AND source != 'gh-search-new'
          GROUP BY full_name
          ORDER BY (wsp IS NOT NULL) DESC, wsp DESC, days DESC, sp DESC, r ASC
          LIMIT ?`,
@@ -679,9 +684,9 @@ export class Store {
   private listPersistent(since: string, minWeeks: number, limit: number): ListRow[] {
     const rows = this.db
       .prepare(
-        `SELECT full_name, COUNT(DISTINCT strftime('%Y-%W', list_date)) AS weeks, COUNT(*) AS n,
+        `SELECT full_name, COUNT(DISTINCT date(list_date, 'weekday 0', '-6 days')) AS weeks, COUNT(*) AS n,
                 MIN(list_date) AS first_seen, MAX(list_date) AS last_seen
-         FROM appearances WHERE list_date >= ?
+         FROM appearances WHERE list_date >= ? AND source != 'gh-search-new'
          GROUP BY full_name HAVING weeks >= ?
          ORDER BY weeks DESC, n DESC, last_seen DESC
          LIMIT ?`,
@@ -722,13 +727,16 @@ export class Store {
   private listNew(from: string, to: string, limit: number): ListRow[] {
     const rows = this.db
       .prepare(
-        `SELECT full_name, MIN(list_date) AS first_seen, COUNT(*) AS n, MAX(stars_period) AS sp
-         FROM appearances GROUP BY full_name
-         HAVING first_seen BETWEEN ? AND ?
+        // Repos whose first trending appearance falls in the window, found without scanning every appearance (review G1-ops8).
+        `SELECT a.full_name, MIN(a.list_date) AS first_seen, COUNT(*) AS n, MAX(a.stars_period) AS sp
+         FROM appearances a
+         WHERE a.list_date BETWEEN ? AND ? AND a.source != 'gh-search-new'
+           AND NOT EXISTS (SELECT 1 FROM appearances b WHERE b.full_name = a.full_name AND b.list_date < ? AND b.source != 'gh-search-new')
+         GROUP BY a.full_name
          ORDER BY sp DESC, n DESC, first_seen DESC
          LIMIT ?`,
       )
-      .all(from, to, limit) as Row[];
+      .all(from, to, from, limit) as Row[];
     return rows.map((r, i) => ({
       full_name: String(r["full_name"]),
       metric: num(r["sp"]) ?? num(r["n"]) ?? 0,
@@ -742,7 +750,7 @@ export class Store {
     const rows = this.db
       .prepare(
         `SELECT substr(list_date, 1, 7) AS month, full_name, COUNT(DISTINCT list_date) AS days, MAX(stars_period) AS sp, COUNT(*) AS n
-         FROM appearances WHERE list_date BETWEEN ? AND ?
+         FROM appearances WHERE list_date BETWEEN ? AND ? AND source != 'gh-search-new'
          GROUP BY month, full_name
          ORDER BY month, days DESC, sp DESC, n DESC`,
       )
@@ -848,7 +856,7 @@ export class Store {
          ON CONFLICT(full_name) DO UPDATE SET rating = excluded.rating, notes = excluded.notes,
            test_log = COALESCE(excluded.test_log, agent_ratings.test_log), agent = excluded.agent, updated_at = excluded.updated_at`,
       )
-      .run(fullName, input.rating, cleanText(input.notes, 2000), cleanText(input.test_log, 20_000, { multiline: true }), cleanText(input.agent, 80), isoNow());
+      .run(fullName, input.rating, redactSecrets(cleanText(input.notes, 2000)), redactSecrets(cleanText(input.test_log, 20_000, { multiline: true })), cleanText(input.agent, 80), isoNow());
     const sl = this.getShortlist(fullName);
     if (!sl || sl.status === "discovered" || sl.status === "shortlisted") this.setShortlist(fullName, "testing", sl?.note ?? null);
     return this.getAgentRating(fullName) as AgentRating;
@@ -939,6 +947,19 @@ export class Store {
     this.transaction(() => {
       for (const n of names) ins.run(n, kind, date);
     });
+  }
+
+  listPicks(): Array<{ full_name: string; kind: string; pick_date: string }> {
+    return (this.db.prepare("SELECT full_name, kind, pick_date FROM picks ORDER BY pick_date, kind, full_name").all() as Row[]).map((r) => ({ full_name: String(r["full_name"]), kind: String(r["kind"]), pick_date: String(r["pick_date"]) }));
+  }
+
+  importPicks(picks: ReadonlyArray<{ full_name: string; kind: string; pick_date: string }>): number {
+    const ins = this.db.prepare("INSERT OR IGNORE INTO picks (full_name, kind, pick_date) VALUES (?, ?, ?)");
+    let n = 0;
+    this.transaction(() => {
+      for (const p of picks) if (isFullName(p.full_name) && /^(daily|weekly)$/.test(p.kind) && /^\d{4}-\d{2}-\d{2}$/.test(p.pick_date)) n += Number(ins.run(p.full_name, p.kind, p.pick_date).changes);
+    });
+    return n;
   }
 
   /** Repos picked on any day in [since, before), optionally only by one kind of report. */
@@ -1086,6 +1107,24 @@ export class Store {
     };
   }
 
+  /** Every repo record, without loading appearances or history (review G1-ops4). */
+  exportRepos(): RepoRecord[] {
+    return (this.db.prepare("SELECT * FROM repos ORDER BY full_name").all() as Row[]).map(rowToRepo);
+  }
+
+  /** Owner state and written pages: what a pull needs, a fraction of the full bundle. */
+  ownerBundle(): Pick<ExportBundle, "exported_at" | "shortlist" | "ratings" | "agent_ratings" | "aliases" | "picks" | "resources"> {
+    return {
+      exported_at: isoNow(),
+      shortlist: this.listShortlist(true),
+      ratings: this.listRatings(),
+      agent_ratings: this.listAgentRatings(),
+      aliases: this.listAliases(),
+      picks: this.listPicks(),
+      resources: (this.db.prepare("SELECT * FROM resources ORDER BY full_name").all() as Row[]).map((r) => ({ full_name: String(r["full_name"]), generated_at: String(r["generated_at"]), markdown: String(r["markdown"]) })),
+    };
+  }
+
   exportBundle(): ExportBundle {
     const all = (sql: string): Row[] => this.db.prepare(sql).all() as Row[];
     return {
@@ -1111,6 +1150,7 @@ export class Store {
       ratings: this.listRatings(),
       agent_ratings: this.listAgentRatings(),
       aliases: this.listAliases(),
+      picks: this.listPicks(),
       reports: all("SELECT * FROM reports ORDER BY kind, id").map((r) => ({
         kind: String(r["kind"]),
         id: String(r["id"]),
@@ -1133,14 +1173,24 @@ export class Store {
       for (const r of repos) {
         if (!isFullName(r.full_name)) continue;
         const existing = this.getRepo(r.full_name);
-        if (existing?.enriched_at && r.enriched_at && existing.enriched_at > r.enriched_at) continue;
-        // Published shards carry no README text; keep the local copy when the README has not changed.
-        const excerpt = r.readme_excerpt ?? (existing && existing.readme_hash === r.readme_hash ? existing.readme_excerpt : null);
-        this.upsertRepoMeta({ ...r, readme_excerpt: excerpt });
-        if (r.summary && r.business_use && r.summary_source && r.summary_hash) {
+        // Never let an older or thinner record replace a newer one (review G1-cor7).
+        const staleMeta = !!existing?.enriched_at && (!r.enriched_at || existing.enriched_at > r.enriched_at);
+        if (!staleMeta) {
+          // Published shards carry no README text; keep the local copy when the README has not changed.
+          const excerpt = r.readme_excerpt ?? (existing && existing.readme_hash === r.readme_hash ? existing.readme_excerpt : null);
+          this.upsertRepoMeta({ ...r, readme_excerpt: excerpt });
+        }
+        const rank = (src: string | null | undefined): number => (src === "llm" ? 2 : src === "heuristic" ? 1 : 0);
+        const summaryIsBetter =
+          !existing?.summary ||
+          rank(r.summary_source) > rank(existing.summary_source) ||
+          (rank(r.summary_source) === rank(existing.summary_source) && (r.summary_at ?? "") > (existing.summary_at ?? ""));
+        if (staleMeta && !summaryIsBetter) continue;
+        if (summaryIsBetter && r.summary && r.business_use && r.summary_source && r.summary_hash) {
           this.setSummary(r.full_name, { summary: r.summary, business_use: r.business_use, source: r.summary_source, hash: r.summary_hash });
         }
-        if (r.category !== "other" || r.category_source === "owner") this.setCategory(r.full_name, r.category, r.category_source);
+        const ownerHere = existing?.category_source === "owner" && r.category_source !== "owner";
+        if (!ownerHere && (r.category !== "other" || r.category_source === "owner")) this.setCategory(r.full_name, r.category, r.category_source);
         n++;
       }
     });
@@ -1148,22 +1198,24 @@ export class Store {
   }
 
   importOwnerState(input: { shortlist?: ShortlistEntry[]; ratings?: Rating[] }): void {
+    // Rows from the data repo or a server export are input from outside: validate them like API writes (review G1-sec10).
+    const okDate = (d: unknown): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}T/.test(d);
     this.transaction(() => {
-      for (const s of input.shortlist ?? []) {
+      for (const s of (input.shortlist ?? []).filter((x) => isFullName(x.full_name) && SHORTLIST_STATUSES.includes(x.status) && okDate(x.updated_at))) {
         const cur = this.getShortlist(s.full_name);
         if (cur && cur.updated_at >= s.updated_at) continue;
         this.ensureRepo(s.full_name);
         this.db
           .prepare("INSERT OR REPLACE INTO shortlist (full_name, status, note, updated_at) VALUES (?, ?, ?, ?)")
-          .run(s.full_name, s.status, s.note, s.updated_at);
+          .run(s.full_name, s.status, cleanText(s.note, 1000), s.updated_at);
       }
-      for (const r of input.ratings ?? []) {
+      for (const r of (input.ratings ?? []).filter((x) => isFullName(x.full_name) && Number.isInteger(x.rating) && x.rating >= 1 && x.rating <= 5 && okDate(x.updated_at) && (x.verdict_override === null || ["BUILD", "WATCH", "SKIP"].includes(x.verdict_override)))) {
         const cur = this.getRating(r.full_name);
         if (cur && cur.updated_at >= r.updated_at) continue;
         this.ensureRepo(r.full_name);
         this.db
           .prepare("INSERT OR REPLACE INTO ratings (full_name, rating, notes, tested_at, verdict_override, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-          .run(r.full_name, r.rating, r.notes, r.tested_at, r.verdict_override, r.updated_at);
+          .run(r.full_name, r.rating, cleanText(r.notes, 2000), r.tested_at, r.verdict_override, r.updated_at);
       }
     });
   }

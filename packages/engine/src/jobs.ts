@@ -22,7 +22,7 @@ import { fetchAllTrending } from "./sources/trending-page.js";
 import { fetchVitaletsComments, parseVitaletsComment } from "./sources/vitalets-archive.js";
 import type { ExportBundle, Store } from "./store/store.js";
 import { CATEGORY_IDS, type CategoryId, type Profile, type RepoRecord, type RepoView, type Snapshot } from "./types.js";
-import { addDays, dateRange, isoDate, isoNow, isoWeek } from "./util/dates.js";
+import { addDays, dateRange, isoDate, isoNow, isoWeek, weekStart } from "./util/dates.js";
 import { isFullName } from "./util/text.js";
 import { rankedList, rescoreAll, repoView } from "./views.js";
 
@@ -157,7 +157,7 @@ export async function collectLive(ctx: JobContext, options: { date?: string; sea
     // A stalled list is archived as observed but earns no appearances.
     for (const s of snapshots) if (!stalled.includes(listKey(s))) inserted += ctx.store.ingestSnapshot(s).inserted;
     if (snapshots.length > 0) {
-      writeSnapshotFile(ctx.config.dataDir, "trending-page", date, snapshots);
+      writeSnapshotFile(ctx.config.dataDir, "trending-page", date, snapshots.map((sn) => (stalled.includes(listKey(sn)) ? { ...sn, stalled: true } : sn)));
       ctx.store.markSnapshotImported("trending-page", date);
     }
     let searchEntries = 0;
@@ -253,7 +253,7 @@ export function importSnapshots(ctx: JobContext): { files: number; inserted: num
     if (ctx.store.hasSnapshot(f.source, f.date)) continue;
     const parsed = readSnapshotFile(f.file);
     if (!parsed) continue;
-    for (const s of parsed.lists) inserted += ctx.store.ingestSnapshot(s).inserted;
+    for (const s of parsed.lists) if (!s.stalled) inserted += ctx.store.ingestSnapshot(s).inserted;
     ctx.store.markSnapshotImported(f.source, f.date);
     files++;
   }
@@ -274,7 +274,7 @@ export async function enrichPending(ctx: JobContext, options: { limit?: number; 
       for (const meta of res.found) {
         ctx.store.upsertRepoMeta(meta);
         const repo = ctx.store.getRepo(meta.full_name);
-        if (repo && repo.category_source !== "owner") {
+        if (repo && repo.category_source !== "owner" && repo.category_source !== "llm") {
           const c = classifyRepo(repo);
           ctx.store.setCategory(repo.full_name, c.category, "rule");
         }
@@ -350,7 +350,9 @@ export function classifyAll(ctx: JobContext, options: { onlyUnclassified?: boole
 export async function summarizePending(ctx: JobContext, profile: Profile, options: { limit?: number; since?: string; heuristicOnly?: boolean } = {}): Promise<Record<string, unknown>> {
   return recorded(ctx, "summarize", async () => {
     const limit = options.limit ?? 120;
-    const names = ctx.store.namesNeedingSummary(limit, options.since);
+    // A repo the model failed on three times stays heuristic instead of being paid for every day (review G1-ops3).
+    const failures = (n: string): number => Number.parseInt(ctx.store.getMeta(`llm_fail:${n}`) ?? "0", 10) || 0;
+    const names = ctx.store.namesNeedingSummary(limit * 2, options.since).filter((n) => failures(n) < 3).slice(0, limit);
     let llm = 0;
     let heuristic = 0;
     let capped = false;
@@ -366,6 +368,7 @@ export async function summarizePending(ctx: JobContext, profile: Profile, option
           continue;
         }
         if (ctx.llm.capReached()) capped = true;
+        else ctx.store.setMeta(`llm_fail:${name}`, String(failures(name) + 1));
       }
       if (!repo.summary) {
         const h = heuristicSummary(repo);
@@ -464,8 +467,16 @@ function shardKey(fullName: string): string {
   return /[a-z0-9]/.test(c) ? c : "_";
 }
 
+/** Set while a fresh server is still rebuilding from the data repo; export and publish refuse to run. */
+export const IMPORT_PENDING = "import_pending";
+
+function assertNotRebuilding(ctx: JobContext): void {
+  if (ctx.store.getMeta(IMPORT_PENDING) === "1") throw new Error("the store is still being rebuilt from the data repo; refusing to export over it");
+}
+
 export function exportData(ctx: JobContext): { repos: number; shards: number } {
-  const bundle = ctx.store.exportBundle();
+  assertNotRebuilding(ctx);
+  const bundle = { ...ctx.store.ownerBundle(), repos: ctx.store.exportRepos() };
   const reposDir = path.join(ctx.config.dataDir, "repos");
   mkdirSync(reposDir, { recursive: true });
   const shards = new Map<string, RepoRecord[]>();
@@ -476,16 +487,18 @@ export function exportData(ctx: JobContext): { repos: number; shards: number } {
     arr.push({ ...r, readme_excerpt: null });
     shards.set(k, arr);
   }
-  for (const [k, arr] of shards) writeFileSync(path.join(reposDir, `${k}.json`), `${JSON.stringify(arr, null, 0)}\n`);
+  // One repo per line: a day's star-count changes become small line diffs in git, not whole-shard rewrites (review G1-ops7).
+  for (const [k, arr] of shards) writeFileSync(path.join(reposDir, `${k}.json`), `[\n${arr.map((r) => JSON.stringify(r)).join(",\n")}\n]\n`);
   const userDir = path.join(ctx.config.dataDir, "user");
   mkdirSync(userDir, { recursive: true });
   writeFileSync(path.join(userDir, "shortlist.json"), `${JSON.stringify(bundle.shortlist, null, 2)}\n`);
   writeFileSync(path.join(userDir, "ratings.json"), `${JSON.stringify(bundle.ratings, null, 2)}\n`);
   writeFileSync(path.join(userDir, "agent-ratings.json"), `${JSON.stringify(ctx.store.listAgentRatings(), null, 2)}\n`);
+  writeFileSync(path.join(userDir, "picks.json"), `${JSON.stringify(ctx.store.listPicks(), null, 0)}\n`);
   writeFileSync(path.join(ctx.config.dataDir, "aliases.json"), `${JSON.stringify(ctx.store.listAliases(), null, 0)}\n`);
   writeFileSync(
     path.join(ctx.config.dataDir, "index.json"),
-    `${JSON.stringify({ exported_at: bundle.exported_at, repos: bundle.repos.length, appearances: bundle.appearances.length, shards: [...shards.keys()].sort(), stats: ctx.store.stats() }, null, 2)}\n`,
+    `${JSON.stringify({ exported_at: bundle.exported_at, repos: bundle.repos.length, shards: [...shards.keys()].sort(), stats: ctx.store.stats() }, null, 2)}\n`,
   );
   ctx.log(`export: ${bundle.repos.length} repos in ${shards.size} shards`);
   return { repos: bundle.repos.length, shards: shards.size };
@@ -547,6 +560,7 @@ export function importData(ctx: JobContext): { repos: number; snapshots: number;
     const stars = readStarsFile(starsFile);
     ctx.store.replaceUserStars(stars.map((s) => ({ full_name: s.full_name, starred_at: s.starred_at })));
   }
+  ctx.store.importPicks(readJson<Array<{ full_name: string; kind: string; pick_date: string }>>(path.join(userDir, "picks.json")) ?? []);
   for (const a of readJson<Array<{ full_name: string; rating: number; notes: string | null; test_log: string | null; agent: string | null }>>(path.join(userDir, "agent-ratings.json")) ?? []) {
     if (isFullName(a.full_name) && !ctx.store.getAgentRating(a.full_name) && Number.isInteger(a.rating)) ctx.store.setAgentRating(a.full_name, a);
   }
@@ -561,18 +575,31 @@ export function importData(ctx: JobContext): { repos: number; snapshots: number;
 }
 
 /** Download the public repo's data/ tree (raw URLs) into dataDir, for a server with an empty disk. */
-export async function fetchDataFromRepo(ctx: JobContext, options: { fetchImpl?: typeof fetch } = {}): Promise<{ files: number }> {
+/**
+ * All or nothing (review G1-cor1): a manifest that cannot be read, or any listed file that cannot be fetched
+ * after a retry, throws — a half-rebuilt store must never be exported over the public data repo. A data repo
+ * with no manifest at all (a first deployment) returns `{ files: 0, empty: true }`.
+ */
+export async function fetchDataFromRepo(ctx: JobContext, options: { fetchImpl?: typeof fetch } = {}): Promise<{ files: number; empty?: boolean }> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const { dataRepo, dataBranch } = ctx.config;
   const base = `https://raw.githubusercontent.com/${dataRepo}/${dataBranch}`;
   const get = async (p: string): Promise<string | null> => {
-    const res = await fetchImpl(`${base}/${p}`);
-    return res.ok ? res.text() : null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetchImpl(`${base}/${p}`);
+        if (res.status === 404) return null;
+        if (res.ok) return await res.text();
+      } catch {
+        // retry once
+      }
+    }
+    throw new Error(`could not fetch ${p} from ${dataRepo}@${dataBranch}`);
   };
   const manifest = await get("data/manifest.json");
   if (!manifest) {
-    ctx.log(`fetchDataFromRepo: no data/manifest.json at ${dataRepo}@${dataBranch}`);
-    return { files: 0 };
+    ctx.log(`fetchDataFromRepo: no data/manifest.json at ${dataRepo}@${dataBranch} (empty data repo)`);
+    return { files: 0, empty: true };
   }
   const list = JSON.parse(manifest) as { files: string[] };
   const wanted = list.files.filter((rel) => /^(data\/[\w./-]+\.json|reports\/[\w./-]+\.md|resources\/[\w.-]+\.md)$/.test(rel) && !rel.includes(".."));
@@ -581,8 +608,8 @@ export async function fetchDataFromRepo(ctx: JobContext, options: { fetchImpl?: 
   const worker = async (): Promise<void> => {
     while (next < wanted.length) {
       const rel = wanted[next++] as string;
-      const text = await get(rel).catch(() => null);
-      if (text === null) continue;
+      const text = await get(rel);
+      if (text === null) throw new Error(`manifest lists ${rel} but it is missing from ${dataRepo}`);
       const out = path.join(ctx.config.dataRoot, rel);
       mkdirSync(path.dirname(out), { recursive: true });
       writeFileSync(out, text);
@@ -639,6 +666,7 @@ export async function publishToRepo(ctx: JobContext, options: { paths?: string[]
     ctx.log("publish: refusing the gh CLI token; set GITHUB_TOKEN to a fine-grained PAT, or pass --use-gh-token by hand");
     return { committed: false, reason: "gh token refused" };
   }
+  assertNotRebuilding(ctx);
   const root = ctx.config.dataRoot;
   const rels = options.paths ?? defaultPublishPaths(ctx);
   const files: PublishFile[] = [];
@@ -666,6 +694,7 @@ function defaultPublishPaths(ctx: JobContext): string[] {
   add(path.join(ctx.config.dataDir, "user", "ratings.json"));
   add(path.join(ctx.config.dataDir, "user", "profile.json"));
   add(path.join(ctx.config.dataDir, "user", "agent-ratings.json"));
+  add(path.join(ctx.config.dataDir, "user", "picks.json"));
   add(path.join(ctx.config.dataDir, "aliases.json"));
   add(path.join(ctx.config.dataDir, "index.json"));
   add(path.join(ctx.config.dataDir, "manifest.json"));
@@ -714,11 +743,13 @@ export async function runDaily(ctx: JobContext, options: { date?: string; publis
   out["daily"] = await recorded(ctx, "report-daily", async () => writeDaily(ctx, profile, date, sources, credentials));
   const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
   if (options.weekly ?? dow === 1) {
-    out["weekly"] = await recorded(ctx, "report-weekly", async () => writeWeekly(ctx, profile, date, sources, credentials));
+    // Monday's run reports the week that just ended, Monday..Sunday (review G1-cor3).
+    out["weekly"] = await recorded(ctx, "report-weekly", async () => writeWeekly(ctx, profile, completedWeekEnd(date), sources, credentials));
     ctx.store.setMeta("last_weekly_ok", isoWeek(date));
   }
   out["export"] = await recorded(ctx, "export", async () => ({ ...exportData(ctx), manifest: writeDataManifest(ctx) }));
-  ctx.store.setMeta("last_daily_ok", date);
+  // Never move the marker backwards: a re-run for an old date must not make today look undone (review G1-cor6).
+  if ((ctx.store.getMeta("last_daily_ok") ?? "") < date) ctx.store.setMeta("last_daily_ok", date);
   if (options.publish ?? true) {
     try {
       out["publish"] = await recorded(ctx, "publish", () => publishToRepo(ctx, { message: `kinly: daily ${date}`, ...(options.allowGhToken ? { allowGhToken: true } : {}) }));
@@ -805,13 +836,18 @@ export async function research(ctx: JobContext, profile: Profile, input: { topic
   };
 }
 
+/** The Sunday that ends the last complete ISO week before `date`'s week. */
+export function completedWeekEnd(date: string): string {
+  return addDays(weekStart(date), -1);
+}
+
 /** The weekly report on its own (the daily pipeline also writes it on Mondays); used for catch-up. */
 export async function runWeekly(ctx: JobContext, options: { date?: string; publish?: boolean; allowGhToken?: boolean } = {}): Promise<Record<string, unknown>> {
   const date = options.date ?? isoDate();
   const credentials = await credentialStates(ctx);
   const profile = loadProfile(ctx);
   const out: Record<string, unknown> = { date };
-  out["weekly"] = await recorded(ctx, "report-weekly", async () => writeWeekly(ctx, profile, date, ["trending-page"], credentials));
+  out["weekly"] = await recorded(ctx, "report-weekly", async () => writeWeekly(ctx, profile, completedWeekEnd(date), ["trending-page"], credentials));
   ctx.store.setMeta("last_weekly_ok", isoWeek(date));
   out["export"] = await recorded(ctx, "export", async () => ({ ...exportData(ctx), manifest: writeDataManifest(ctx) }));
   if (options.publish ?? true) {
@@ -859,23 +895,27 @@ export async function pullFromServer(ctx: JobContext, options: { url: string; to
   const res = await (options.fetchImpl ?? fetch)(`${options.url.replace(/\/+$/, "")}/api/export`, { headers: { authorization: `Bearer ${options.token}`, accept: "application/json" } });
   if (!res.ok) throw new Error(`pull: ${res.status} from ${options.url}/api/export`);
   const b = (await res.json()) as ExportBundle;
-  ctx.store.importAliases(b.aliases ?? []);
+  ctx.store.importAliases((b.aliases ?? []).filter((a) => isFullName(a.from_name) && isFullName(a.to_name)));
+  ctx.store.importPicks(b.picks ?? []);
   ctx.store.importOwnerState({ shortlist: b.shortlist ?? [], ratings: b.ratings ?? [] });
   let agentRatings = 0;
-  for (const a of b.agent_ratings ?? []) {
+  // The export is input from a network service: only well-formed names ever become file paths or rows (review G1-sec1).
+  for (const a of (b.agent_ratings ?? []).filter((x) => isFullName(x.full_name) && Number.isInteger(x.rating) && x.rating >= 1 && x.rating <= 5)) {
     const cur = ctx.store.getAgentRating(a.full_name);
     if (cur && cur.updated_at >= a.updated_at) continue;
     ctx.store.setAgentRating(a.full_name, a);
     agentRatings++;
   }
   let resources = 0;
-  for (const r of b.resources ?? []) {
+  const resRoot = path.resolve(ctx.config.resourcesDir);
+  for (const r of (b.resources ?? []).filter((x) => isFullName(x.full_name) && typeof x.markdown === "string" && typeof x.generated_at === "string")) {
     const cur = ctx.store.getResource(r.full_name);
     if (cur && cur.generated_at >= r.generated_at) continue;
     ctx.store.saveResource(r.full_name, r.markdown, { generatedAt: r.generated_at });
-    const file = path.join(ctx.config.resourcesDir, resourceFileName(r.full_name));
+    const file = path.resolve(resRoot, resourceFileName(r.full_name));
+    if (!file.startsWith(resRoot + path.sep)) continue;
     mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, r.markdown);
+    writeFileSync(file, r.markdown.slice(0, 200_000));
     resources++;
   }
   return { shortlist: (b.shortlist ?? []).length, ratings: (b.ratings ?? []).length, agentRatings, resources };

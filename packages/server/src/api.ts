@@ -32,6 +32,8 @@ export interface ApiDeps {
   /** Wraps a job so it cannot overlap the scheduler's runs. */
   runExclusive?: <T>(name: string, fn: () => Promise<T>) => Promise<T>;
   bucket?: TokenBucket;
+  /** False while a fresh store is still being rebuilt; jobs answer 503 until then. */
+  isReady?: () => boolean;
   version?: string;
   startedAt?: string;
 }
@@ -115,10 +117,15 @@ export function authorized(req: IncomingMessage, token: string | null): boolean 
   return timingSafeEqual(digest(m[1].trim()), digest(token));
 }
 
-function clientIp(req: IncomingMessage): string {
+/**
+ * The client address for rate limiting. Railway's proxy appends the address it saw to
+ * X-Forwarded-For, so the last hop is the one a client cannot forge; the first is whatever
+ * the client sent (review G1-sec5).
+ */
+export function clientIp(req: IncomingMessage): string {
   const fwd = req.headers["x-forwarded-for"];
-  const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(",")[0]?.trim();
-  return first || req.socket.remoteAddress || "unknown";
+  const hops = (Array.isArray(fwd) ? fwd.join(",") : (fwd ?? "")).split(",").map((h) => h.trim()).filter(Boolean);
+  return hops.at(-1) || req.socket.remoteAddress || "unknown";
 }
 
 function str(body: Record<string, unknown>, key: string, max: number): string | null {
@@ -140,6 +147,17 @@ export function createApi(deps: ApiDeps): (req: IncomingMessage, res: ServerResp
     const value = await jobs.credentialStates(ctx);
     credentialCache = { at: Date.now(), value };
     return value;
+  };
+
+  // A short in-process cache for the heavier list routes, cleared by any write (review G1-ops5).
+  const responseCache = new Map<string, { at: number; body: unknown }>();
+  const cached = (key: string, compute: () => unknown): unknown => {
+    const hit = responseCache.get(key);
+    if (hit && Date.now() - hit.at < 120_000) return hit.body;
+    const body = compute();
+    if (responseCache.size >= 300) responseCache.clear();
+    responseCache.set(key, { at: Date.now(), body });
+    return body;
   };
 
   const repoFromPath = (owner: string, name: string) => {
@@ -170,6 +188,11 @@ export function createApi(deps: ApiDeps): (req: IncomingMessage, res: ServerResp
           return send(res, 200, { service: "Project Kinly by Vantik Systems", docs: "https://github.com/angellog/kinly/blob/main/docs/API.md", data: `https://github.com/${ctx.config.dataRepo}` }, cache);
         }
         if (p === "/api/status") {
+          // Public: whether it is up and fresh. Credentials, spend and error text only with the token (review G1-sec9).
+          if (!authorized(req, ctx.config.apiToken)) {
+            const sched = deps.scheduler?.status() as Record<string, unknown> | undefined;
+            return send(res, 200, { ok: true, started_at: startedAt, last_daily_ok: sched?.["last_daily_ok"] ?? null, last_weekly_ok: sched?.["last_weekly_ok"] ?? null, stats: ctx.store.stats() }, noStore);
+          }
           return send(
             res,
             200,
@@ -199,13 +222,17 @@ export function createApi(deps: ApiDeps): (req: IncomingMessage, res: ServerResp
           const category = categoryParam(url);
           const date = dateParam(url);
           const minRel = url.searchParams.get("min_relevance");
-          const views = rankedList(ctx.store, kind, profile(), {
-            limit: intParam(url, "limit", 15, 1, 100),
-            ...(category ? { category } : {}),
-            ...(date ? { date } : {}),
-            ...(minRel ? { min_relevance: intParam(url, "min_relevance", 0, 0, 100) } : {}),
+          const limit = intParam(url, "limit", 15, 1, 100);
+          const body = cached(`trending|${kind}|${category ?? ""}|${date ?? ""}|${minRel ?? ""}|${limit}`, () => {
+            const views = rankedList(ctx.store, kind, profile(), {
+              limit,
+              ...(category ? { category } : {}),
+              ...(date ? { date } : {}),
+              ...(minRel ? { min_relevance: intParam(url, "min_relevance", 0, 0, 100) } : {}),
+            });
+            return { window: kind, date: date ?? ctx.store.latestListDate("daily"), count: views.length, items: views };
           });
-          return send(res, 200, { window: kind, date: date ?? ctx.store.latestListDate("daily"), count: views.length, items: views }, cache);
+          return send(res, 200, body, cache);
         }
         if (p === "/api/repos") {
           const category = categoryParam(url);
@@ -225,7 +252,7 @@ export function createApi(deps: ApiDeps): (req: IncomingMessage, res: ServerResp
             offset: intParam(url, "offset", 0, 0, 100_000),
           });
           const pr = profile();
-          return send(res, 200, { total, items: rows.map((r) => repoView(ctx.store, r, pr)) }, cache);
+          return send(res, 200, cached(`repos|${url.search}`, () => ({ total, items: rows.map((r) => repoView(ctx.store, r, pr)) })), cache);
         }
         let m = /^\/api\/repos\/([^/]+)\/([^/]+)$/.exec(p);
         if (m) {
@@ -271,6 +298,8 @@ export function createApi(deps: ApiDeps): (req: IncomingMessage, res: ServerResp
         if (p === "/api/resources") return send(res, 200, { items: ctx.store.listResources() }, cache);
         if (p === "/api/export") {
           if (!authorized(req, ctx.config.apiToken)) throw new HttpError(401, "bearer token required");
+          // Default: owner state and pages (what `kinly pull` needs). ?full=1 for the whole store, without README text (review G1-ops4).
+          if (url.searchParams.get("full") !== "1") return send(res, 200, ctx.store.ownerBundle(), noStore);
           const bundle = ctx.store.exportBundle();
           return send(res, 200, { ...bundle, repos: bundle.repos.map((r) => ({ ...r, readme_excerpt: null })) }, noStore);
         }
@@ -280,6 +309,7 @@ export function createApi(deps: ApiDeps): (req: IncomingMessage, res: ServerResp
       if (method === "POST") {
         if (!authorized(req, ctx.config.apiToken)) throw new HttpError(ctx.config.apiToken ? 401 : 503, ctx.config.apiToken ? "bearer token required" : "writes are disabled: KINLY_API_TOKEN is not set");
         const body = await readJson(req);
+        responseCache.clear();
         let m = /^\/api\/repos\/([^/]+)\/([^/]+)\/(shortlist|rating|agent-rating|resource)$/.exec(p);
         if (m) {
           const name = repoFromPath(m[1] ?? "", m[2] ?? "");
@@ -310,21 +340,26 @@ export function createApi(deps: ApiDeps): (req: IncomingMessage, res: ServerResp
         if (p === "/api/ask") {
           const q = str(body, "question", 1000);
           if (!q) throw new HttpError(400, "question is required");
-          return send(res, 200, await jobs.ask(ctx, profile(), q), noStore);
+          return send(res, 200, await exclusive("ask", () => jobs.ask(ctx, profile(), q)), noStore);
         }
         if (p === "/api/research") {
           const topic = str(body, "topic", 200);
           const cat = str(body, "category", 40);
           if (cat && !(CATEGORY_IDS as readonly string[]).includes(cat)) throw new HttpError(400, `unknown category "${cat}"`);
           if (!topic && !cat) throw new HttpError(400, "topic or category is required");
-          return send(res, 200, await jobs.research(ctx, profile(), { ...(topic ? { topic } : {}), ...(cat ? { category: cat as CategoryId } : {}) }), noStore);
+          return send(res, 200, await exclusive("research", () => jobs.research(ctx, profile(), { ...(topic ? { topic } : {}), ...(cat ? { category: cat as CategoryId } : {}) })), noStore);
         }
         if (p === "/api/jobs/run") {
           const job = str(body, "job", 30);
           if (!job || !(JOBS as readonly string[]).includes(job)) throw new HttpError(400, `job must be one of ${JOBS.join(", ")}`);
+          if (deps.isReady && !deps.isReady()) throw new HttpError(503, "the store is still being rebuilt from the data repo; try again in a few minutes");
           if (deps.scheduler?.running) throw new HttpError(409, `busy: ${deps.scheduler.running} is running`);
-          const date = typeof body["date"] === "string" && dates.isIsoDate(body["date"]) ? body["date"] : dates.isoDate();
-          const result = await exclusive(job, async () => {
+          const today = dates.isoDate();
+          const date = typeof body["date"] === "string" && dates.isIsoDate(body["date"]) ? body["date"] : today;
+          // Collect scrapes the live page: stamping today's lists with another date would corrupt that day's archive (review G1-cor6).
+          if ((job === "daily" || job === "collect") && date !== today) throw new HttpError(400, `${job} only runs for today (${today}); the live trending page has no history`);
+          // Long jobs run in the background; the outcome lands in /api/status recent_runs (review G1-ops10).
+          const work = exclusive(job, async () => {
             switch (job) {
               case "daily":
                 return jobs.runDaily(ctx, { date });
@@ -350,7 +385,12 @@ export function createApi(deps: ApiDeps): (req: IncomingMessage, res: ServerResp
                 return jobs.publishToRepo(ctx, { message: `kinly: manual publish ${date}` });
             }
           });
-          return send(res, 200, { job, result }, noStore);
+          void work.then(
+            () => ctx.log(`api job ${job} done`),
+            (err) => ctx.log(`api job ${job} failed: ${err instanceof Error ? err.message : String(err)}`),
+          );
+          responseCache.clear();
+          return send(res, 202, { job, date, accepted: true, status: "/api/status" }, noStore);
         }
         throw new HttpError(404, "not found");
       }

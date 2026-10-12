@@ -44,7 +44,7 @@ export function dailyReport(store: Store, profile: Profile | null, options: Dail
     .slice(0, 10);
 
   const parts: string[] = [];
-  parts.push(h1(`Kinly Daily — ${date}`, `What trended on GitHub today, what it is for, and which of it is worth your time. ${today.length} repositories on today's lists; ${picks.length} picks for Vantik Systems / FeetBit.`));
+  parts.push(h1(`Kinly Daily — ${date}`, `What trended on GitHub today, what it is for, and which of it is worth your time. ${store.list("today", { date, limit: 3000 }).length} repositories on today's lists; ${picks.length} picks for Vantik Systems / FeetBit.`));
 
   parts.push(coverageNote(today));
   parts.push(`## Top ${topToday.length} today\n`);

@@ -37,9 +37,9 @@ describe("stargazers history (D13)", () => {
       { week_start: "2026-10-04", total: 348, days: [91, 74, 88, 91, 4, 0, 0] },
       { week_start: "2026-09-27", total: 700, days: [100, 100, 100, 100, 100, 100, 100] },
     ];
-    // as of Thursday 2026-10-08: last 7 observed days = Fri..Sat of the previous week (2) + Sun..Thu (5)
+    // fetched Thursday 2026-10-08: the last 7 complete days are Thu 10-01 .. Wed 10-07 (today is in progress)
     const sd = sevenDay(weeks, "2026-10-08");
-    assert.equal(sd?.stars7d, 200 + 91 + 74 + 88 + 91 + 4);
+    assert.equal(sd?.stars7d, 300 + 91 + 74 + 88 + 91);
     assert.equal(dailySeries(weeks, "2026-10-05").at(-1)?.date, "2026-10-05");
     assert.equal(peakWeek(weeks)?.total, 700);
   });

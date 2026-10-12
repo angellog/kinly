@@ -143,4 +143,10 @@ export const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (full_name, kind, pick_date)
   );
   `,
+  // 3 — review G1: indexes for the per-repo and history queries; WAL growth is bounded at open.
+  `
+  CREATE INDEX IF NOT EXISTS idx_appearances_name_date ON appearances (full_name, list_date);
+  CREATE INDEX IF NOT EXISTS idx_star_history_observed ON star_history (observed_at);
+  CREATE INDEX IF NOT EXISTS idx_picks_date ON picks (pick_date);
+  `,
 ];

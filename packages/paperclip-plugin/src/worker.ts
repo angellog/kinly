@@ -1,7 +1,7 @@
 import { definePlugin, runWorker } from "@paperclipai/plugin-sdk";
 import { buildBrief, testIssue, upsertBrief, type BriefIssues } from "./brief.js";
 import { FULL_NAME_RE, KinlyApi, KinlyApiError } from "./client.js";
-import { parseConfig, type KinlyCompanyConfig } from "./config.js";
+import { parseConfig, tokenAllowedFor, type KinlyCompanyConfig } from "./config.js";
 import { repoCard } from "./format.js";
 import { runTool, TOOL_DECLARATIONS } from "./tools.js";
 
@@ -26,6 +26,7 @@ const plugin = definePlugin({
       let token: string | null = null;
       if (write) {
         if (!config.apiTokenRef) throw new KinlyApiError(401, "No Kinly API token is configured for this company (plugin settings → Kinly API token).");
+        if (!tokenAllowedFor(config.apiUrl)) throw new KinlyApiError(403, `The API token is only sent to the Kinly service; ${config.apiUrl} is not it.`);
         token = await ctx.secrets.resolve(config.apiTokenRef, { companyId, configPath: "apiTokenRef" });
       }
       return { api: new KinlyApi({ baseUrl: config.apiUrl, token }), config };
