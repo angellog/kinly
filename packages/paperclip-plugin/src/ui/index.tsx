@@ -108,6 +108,7 @@ export function KinlyPage(_props: PluginPageProps) {
   const companyId = useCompany();
   const [tab, setTab] = useState<Tab>("today");
   const [openRepo, setOpenRepo] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const settings = usePluginData<Settings>("settings", companyId ? { companyId } : undefined);
 
   if (!companyId) return <div style={{ padding: "1.5rem" }}>Open Kinly from inside a company.</div>;
@@ -135,6 +136,20 @@ export function KinlyPage(_props: PluginPageProps) {
 
       {s && !s.enabled && <Banner tone="warn">Kinly is turned off for this company. Turn it on in the plugin settings.</Banner>}
 
+      <div style={{ margin: "0.9rem 0 0" }}>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpenRepo(null);
+          }}
+          placeholder="Search every repository Kinly has seen: name, topic, what it does…"
+          aria-label="Search repositories"
+          style={{ ...input, width: "100%", boxSizing: "border-box" }}
+        />
+      </div>
+
       <nav style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap", margin: "0.9rem 0 0.4rem" }} role="tablist">
         {TABS.map(([id, label]) => (
           <button
@@ -154,6 +169,8 @@ export function KinlyPage(_props: PluginPageProps) {
 
       {openRepo ? (
         <RepoDetail companyId={companyId} fullName={openRepo} canWrite={!!s?.canWrite} onBack={() => setOpenRepo(null)} />
+      ) : query.trim().length >= 2 ? (
+        <SearchResults companyId={companyId} query={query.trim()} onOpen={setOpenRepo} />
       ) : (
         <>
           {tab === "today" && <TrendTab companyId={companyId} windows={[["today", "Trending today"], ["new", "New entrants"]]} onOpen={setOpenRepo} />}
@@ -255,6 +272,18 @@ function RepoRow({ v, rank, onOpen }: { v: RepoView; rank: number; onOpen: (n: s
         <div style={{ fontFamily: mono, fontSize: "0.75rem", opacity: 0.75 }}>fit {v.relevance}</div>
       </div>
     </div>
+  );
+}
+
+function SearchResults({ companyId, query, onOpen }: { companyId: string; query: string; onOpen: (n: string) => void }) {
+  const res = usePluginData<{ total: number; items: RepoView[] }>("search", { companyId, q: query, sort: "score", limit: 25 });
+  return (
+    <section>
+      <SectionHeader label="Search" sub={res.data ? `${res.data.total} match(es) for “${query}”` : undefined} />
+      {res.loading && <Spinner />}
+      {res.error && <Banner tone="warn">{errText(res.error)}</Banner>}
+      {res.data?.items.map((v, i) => <RepoRow key={v.repo.full_name} v={v} rank={i + 1} onOpen={onOpen} />)}
+    </section>
   );
 }
 

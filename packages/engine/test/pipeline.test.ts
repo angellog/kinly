@@ -123,3 +123,29 @@ describe("curated summaries", () => {
     store.close();
   });
 });
+
+describe("pull from server", () => {
+  it("imports owner state and resource pages from /api/export, newer wins", async () => {
+    const bundle = {
+      exported_at: "x", repos: [], appearances: [], star_history: [], user_stars: [], reports: [], meta: {},
+      shortlist: [{ full_name: "a/b", status: "testing", note: null, updated_at: "2026-10-12T00:00:00Z" }],
+      ratings: [],
+      agent_ratings: [{ full_name: "a/b", rating: 3, notes: "ok", test_log: "read-only", agent: "kinly", updated_at: "2026-10-12T00:00:00Z" }],
+      resources: [{ full_name: "a/b", generated_at: "2026-10-12T01:00:00Z", markdown: "# a/b\\n" }],
+      aliases: [],
+    };
+    let auth = "";
+    const server = (async (_u: string | URL | Request, init?: RequestInit) => {
+      auth = String((init?.headers as Record<string, string>)["authorization"]);
+      return new Response(JSON.stringify(bundle), { status: 200 });
+    }) as typeof fetch;
+    const { ctx, store, config } = context(offlineGitHub);
+    const res = await jobs.pullFromServer(ctx, { url: "https://kinly.test/", token: "tok", fetchImpl: server });
+    assert.equal(auth, "Bearer tok");
+    assert.deepEqual(res, { shortlist: 1, ratings: 0, agentRatings: 1, resources: 1 });
+    assert.equal(store.getAgentRating("a/b")?.test_log, "read-only");
+    assert.ok(existsSync(path.join(config.resourcesDir, "a--b.md")));
+    assert.equal((await jobs.pullFromServer(ctx, { url: "https://kinly.test", token: "tok", fetchImpl: server })).resources, 0, "idempotent");
+    store.close();
+  });
+});

@@ -20,7 +20,7 @@ import { detectStalls, listKey } from "./sources/stall.js";
 import { fetchUserStars, readStarsFile, type UserStar } from "./sources/stars.js";
 import { fetchAllTrending } from "./sources/trending-page.js";
 import { fetchVitaletsComments, parseVitaletsComment } from "./sources/vitalets-archive.js";
-import type { Store } from "./store/store.js";
+import type { ExportBundle, Store } from "./store/store.js";
 import { CATEGORY_IDS, type CategoryId, type Profile, type RepoRecord, type RepoView, type Snapshot } from "./types.js";
 import { addDays, dateRange, isoDate, isoNow, isoWeek } from "./util/dates.js";
 import { isFullName } from "./util/text.js";
@@ -847,4 +847,36 @@ export function importSummaries(ctx: JobContext, entries: unknown): { applied: n
     applied++;
   }
   return { applied, skipped };
+}
+
+/**
+ * Pull owner state and written pages down from a running Kinly server
+ * (GET /api/export with the bearer token). This is how the Mac stays the
+ * writer of the data repo until Railway holds its own GitHub token
+ * (docs/WORKFLOW.md): pull, export, commit, push. Newer wins everywhere.
+ */
+export async function pullFromServer(ctx: JobContext, options: { url: string; token: string; fetchImpl?: typeof fetch }): Promise<Record<string, number>> {
+  const res = await (options.fetchImpl ?? fetch)(`${options.url.replace(/\/+$/, "")}/api/export`, { headers: { authorization: `Bearer ${options.token}`, accept: "application/json" } });
+  if (!res.ok) throw new Error(`pull: ${res.status} from ${options.url}/api/export`);
+  const b = (await res.json()) as ExportBundle;
+  ctx.store.importAliases(b.aliases ?? []);
+  ctx.store.importOwnerState({ shortlist: b.shortlist ?? [], ratings: b.ratings ?? [] });
+  let agentRatings = 0;
+  for (const a of b.agent_ratings ?? []) {
+    const cur = ctx.store.getAgentRating(a.full_name);
+    if (cur && cur.updated_at >= a.updated_at) continue;
+    ctx.store.setAgentRating(a.full_name, a);
+    agentRatings++;
+  }
+  let resources = 0;
+  for (const r of b.resources ?? []) {
+    const cur = ctx.store.getResource(r.full_name);
+    if (cur && cur.generated_at >= r.generated_at) continue;
+    ctx.store.saveResource(r.full_name, r.markdown, { generatedAt: r.generated_at });
+    const file = path.join(ctx.config.resourcesDir, resourceFileName(r.full_name));
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, r.markdown);
+    resources++;
+  }
+  return { shortlist: (b.shortlist ?? []).length, ratings: (b.ratings ?? []).length, agentRatings, resources };
 }

@@ -88,6 +88,8 @@ export interface ExportBundle {
   user_stars: Array<{ full_name: string; starred_at: string }>;
   shortlist: ShortlistEntry[];
   ratings: Rating[];
+  agent_ratings?: AgentRating[];
+  aliases?: Array<{ from_name: string; to_name: string }>;
   reports: Array<{ kind: string; id: string; generated_at: string; markdown: string }>;
   resources: Array<{ full_name: string; generated_at: string; markdown: string }>;
   meta: Record<string, string>;
@@ -1038,14 +1040,15 @@ export class Store {
     return r ? { kind: String(r["kind"]), id: String(r["id"]), generated_at: String(r["generated_at"]), markdown: String(r["markdown"]) } : null;
   }
 
-  saveResource(fullName: string, markdown: string): void {
+  /** Store a resource page. A synced copy keeps its original timestamp. */
+  saveResource(fullName: string, markdown: string, options: { generatedAt?: string } = {}): void {
     this.db
       .prepare(
         `INSERT INTO resources (full_name, generated_at, markdown) VALUES (?, ?, ?)
          ON CONFLICT(full_name) DO UPDATE SET generated_at = excluded.generated_at, markdown = excluded.markdown`,
       )
-      .run(fullName, isoNow(), markdown);
-    this.setShortlist(fullName, "resourced", null);
+      .run(fullName, options.generatedAt ?? isoNow(), markdown);
+    // Bench status is not changed here: only a page written after the owner's rating moves `rated` to `resourced` (the API does that).
   }
 
   getResource(fullName: string): { full_name: string; generated_at: string; markdown: string } | null {
@@ -1106,6 +1109,8 @@ export class Store {
       user_stars: this.userStars(),
       shortlist: this.listShortlist(true),
       ratings: this.listRatings(),
+      agent_ratings: this.listAgentRatings(),
+      aliases: this.listAliases(),
       reports: all("SELECT * FROM reports ORDER BY kind, id").map((r) => ({
         kind: String(r["kind"]),
         id: String(r["id"]),

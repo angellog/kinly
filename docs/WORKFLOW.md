@@ -18,7 +18,7 @@ Nothing is ever installed into a real workspace, published to social media, or p
 
 ## Who writes `angellog/kinly-data`
 
-- **Before Railway has a `GITHUB_TOKEN`:** this Mac is the only writer. It runs `kinly daily --no-publish`, then commits and pushes with `git`, or runs `kinly publish --use-gh-token` by hand.
+- **Before Railway has a `GITHUB_TOKEN`:** this Mac is the only writer. It runs `kinly pull` (shortlist, ratings, agent tests and resource pages from the running server), then `kinly export`, then commits and pushes with `git`; or `kinly publish --use-gh-token` by hand.
 - **After the token is set on Railway:** Railway is the **only** writer. Nothing on the Mac commits under `data/`, `reports/` or `resources/`. Before any local edit to that repository, run `git pull --rebase`. Never force-push.
 - Railway commits with the Git Data API: one commit per run, containing only changed files, with a compare-and-swap ref update. A rejected update is retried by the next run; it is never forced.
 

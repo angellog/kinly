@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { loadConfig } from "./config.js";
 import * as jobs from "./jobs.js";
 import { Store } from "./store/store.js";
@@ -29,8 +31,12 @@ import { rankedList, repoView } from "./views.js";
  *   kinly shortlist owner/repo <status> [--note "..."]
  *   kinly rate owner/repo <1-5> [--notes "..."] [--verdict BUILD|WATCH|SKIP]
  *   kinly resource owner/repo [--test-log FILE]
+ *   kinly pull [--url https://…]              pull shortlist, ratings and resource pages from the running server (/api/export)
  *   kinly publish [--message "..."] [--use-gh-token]   push data/, reports/, resources/ to KINLY_DATA_REPO (needs GITHUB_TOKEN;
  *                                            --use-gh-token allows the owner's gh login for an attended run)
+ *   kinly research "topic" [--category C]   ranked repos + synthesis (LLM when a key is set)
+ *   kinly ask "question"                     answer from the database (LLM when a key is set)
+ *   kinly serve                              run the API server and scheduler (packages/server)
  *   kinly status
  */
 
@@ -223,6 +229,32 @@ async function main(argv: string[]): Promise<number> {
         console.log(res.file);
         return 0;
       }
+      case "research": {
+        const topic = positional.join(" ").trim() || flagStr(flags, "topic");
+        const category = flagStr(flags, "category") as CategoryId | undefined;
+        if (!topic && !category) throw new Error("research needs a topic or --category");
+        print(await jobs.research(ctx, jobs.loadProfile(ctx), { ...(topic ? { topic } : {}), ...(category ? { category } : {}) }));
+        return 0;
+      }
+      case "ask": {
+        print(await jobs.ask(ctx, jobs.loadProfile(ctx), positional.join(" ")));
+        return 0;
+      }
+      case "serve": {
+        // The API server lives in packages/server; run it from the same checkout.
+        const entry = path.join(config.root, "packages", "server", "dist", "src", "main.js");
+        if (!existsSync(entry)) throw new Error(`build the server first: npm run build (missing ${entry})`);
+        store.close();
+        const child = spawn(process.execPath, [entry], { stdio: "inherit", env: process.env });
+        return await new Promise<number>((resolve) => child.on("exit", (code) => resolve(code ?? 0)));
+      }
+      case "pull": {
+        const url = flagStr(flags, "url") ?? process.env["KINLY_SERVER_URL"] ?? "https://kinly-api-production.up.railway.app";
+        const token = process.env["KINLY_API_TOKEN"];
+        if (!token) throw new Error("pull needs KINLY_API_TOKEN in the environment or .env");
+        print(await jobs.pullFromServer(ctx, { url, token }));
+        return 0;
+      }
       case "publish": {
         print(await jobs.publishToRepo(ctx, { allowGhToken: flags["use-gh-token"] === true, ...(flagStr(flags, "message") ? { message: flagStr(flags, "message") as string } : {}) }));
         return 0;
@@ -232,7 +264,11 @@ async function main(argv: string[]): Promise<number> {
         return 2;
     }
   } finally {
-    store.close();
+    try {
+      store.close();
+    } catch {
+      // already closed by serve
+    }
   }
 }
 
