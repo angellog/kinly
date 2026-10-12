@@ -202,3 +202,16 @@ describe("review G1 hardening (store)", () => {
     t.close();
   });
 });
+
+describe("import keeps curated decisions", () => {
+  it("applies a summary for a repo without a README and keeps a curated 'other' with its source and time", () => {
+    const s = new Store(":memory:");
+    s.upsertRepoMeta(meta("o/imgui", { readme_hash: null }));
+    s.importRepos([{ ...meta("o/imgui", { readme_hash: null }), summary: "A C++ GUI library.", business_use: "Not for Vantik or FeetBit.", summary_source: "llm", summary_hash: "", category: "other", category_source: "llm", summary_at: "2026-10-12T00:00:00Z" } as never]);
+    const r = s.getRepo("o/imgui");
+    assert.equal(r?.summary, "A C++ GUI library.");
+    assert.equal(r?.summary_at, "2026-10-12T00:00:00Z");
+    assert.equal(r?.category_source, "llm");
+    s.close();
+  });
+});

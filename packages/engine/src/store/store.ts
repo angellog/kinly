@@ -405,10 +405,10 @@ export class Store {
     this.db.prepare("UPDATE repos SET archived = 1, enriched_at = ? WHERE full_name = ?").run(at, fullName);
   }
 
-  setSummary(fullName: string, input: { summary: string; business_use: string; source: "llm" | "heuristic"; hash: string }): void {
+  setSummary(fullName: string, input: { summary: string; business_use: string; source: "llm" | "heuristic"; hash: string; at?: string | null }): void {
     this.db
       .prepare("UPDATE repos SET summary = ?, business_use = ?, summary_source = ?, summary_hash = ?, summary_at = ? WHERE full_name = ?")
-      .run(cleanText(input.summary, 600) ?? "", cleanText(input.business_use, 1200) ?? "", input.source, input.hash, isoNow(), fullName);
+      .run(cleanText(input.summary, 600) ?? "", cleanText(input.business_use, 1200) ?? "", input.source, input.hash, input.at ?? isoNow(), fullName);
   }
 
   setCategory(fullName: string, category: CategoryId, source: CategorySource): void {
@@ -1186,11 +1186,13 @@ export class Store {
           rank(r.summary_source) > rank(existing.summary_source) ||
           (rank(r.summary_source) === rank(existing.summary_source) && (r.summary_at ?? "") > (existing.summary_at ?? ""));
         if (staleMeta && !summaryIsBetter) continue;
-        if (summaryIsBetter && r.summary && r.business_use && r.summary_source && r.summary_hash) {
-          this.setSummary(r.full_name, { summary: r.summary, business_use: r.business_use, source: r.summary_source, hash: r.summary_hash });
+        // A repo with no README has an empty hash: still a valid summary. Keep the original time so imports do not churn.
+        if (summaryIsBetter && r.summary && r.business_use && r.summary_source && typeof r.summary_hash === "string") {
+          this.setSummary(r.full_name, { summary: r.summary, business_use: r.business_use, source: r.summary_source, hash: r.summary_hash, at: r.summary_at });
         }
         const ownerHere = existing?.category_source === "owner" && r.category_source !== "owner";
-        if (!ownerHere && (r.category !== "other" || r.category_source === "owner")) this.setCategory(r.full_name, r.category, r.category_source);
+        // A curated or owner "other" is a decision, not a default: carry it (and its source) too.
+        if (!ownerHere && (r.category !== "other" || r.category_source !== "rule")) this.setCategory(r.full_name, r.category, r.category_source);
         n++;
       }
     });
