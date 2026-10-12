@@ -690,7 +690,8 @@ function defaultPublishPaths(ctx: JobContext): string[] {
   };
   add(path.join(ctx.config.reportsDir, "daily", `${today}.md`));
   add(path.join(ctx.config.reportsDir, "daily", `${addDays(today, -1)}.md`));
-  add(path.join(ctx.config.reportsDir, "weekly", `${isoWeek(today)}.md`));
+  // Weekly reports are named for the completed week (review G1-cor3), so publish that one, never the week in progress.
+  add(path.join(ctx.config.reportsDir, "weekly", `${isoWeek(completedWeekEnd(today))}.md`));
   for (const f of listSnapshotFiles(ctx.config.dataDir)) if (f.date >= addDays(today, -3) && !LOCAL_ONLY_SOURCES.has(f.source)) add(f.file);
   add(path.join(ctx.config.dataDir, "user", "shortlist.json"));
   add(path.join(ctx.config.dataDir, "user", "ratings.json"));
