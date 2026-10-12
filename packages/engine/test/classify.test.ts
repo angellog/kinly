@@ -77,6 +77,11 @@ const CASES: Case[] = [
   { name: "golang/go", description: "The Go programming language", topics: ["go", "golang", "programming-language"], language: "Go", expect: "systems-languages", mustPass: true },
   { name: "ziglang/zig", description: "General-purpose programming language and toolchain for maintaining robust, optimal, and reusable software.", topics: ["zig", "compiler", "programming-language"], language: "Zig", expect: "systems-languages" },
   { name: "torvalds/linux", description: "Linux kernel source tree", topics: [], language: "C", expect: "systems-languages" },
+  // Regressions found in the 2026-10-12 hand check of the top 100 (C3).
+  { name: "WhiskeySockets/Baileys", description: "Socket-based TS/JavaScript API for WhatsApp Web", topics: ["whatsapp", "api", "typescript"], language: "TypeScript", expect: "social-marketing", mustPass: true },
+  { name: "astral-sh/uv", description: "An extremely fast Python package and project manager, written in Rust.", topics: ["packaging", "python", "resolver", "uv"], language: "Rust", expect: "devtools" },
+  { name: "google/googletest", description: "GoogleTest - Google Testing and Mocking Framework", topics: [], language: "C++", expect: "devtools" },
+  { name: "envoyproxy/envoy", description: "Cloud-native high-performance edge/middle/service proxy", topics: ["cncf"], language: "C++", expect: "infra-devops" },
 ];
 
 describe("classifier", () => {

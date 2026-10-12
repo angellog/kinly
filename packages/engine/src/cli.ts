@@ -20,6 +20,7 @@ import { rankedList, repoView } from "./views.js";
  *   kinly star-history [--names a/b,c/d | --top N] [--weeks W]   stargazers history (default: top 50 persistent, 78 weeks)
  *   kinly classify [--all]
  *   kinly summarize [--limit N] [--since D] [--heuristic]
+ *   kinly import-summaries FILE              load curated { full_name, summary, business_use, category? } entries
  *   kinly score
  *   kinly report daily|weekly|landscape [--date D] [--from D --to D] [--narrative FILE]
  *   kinly daily [--no-publish] [--weekly]    the whole unattended pipeline
@@ -145,6 +146,12 @@ async function main(argv: string[]): Promise<number> {
       case "summarize": {
         const profile = jobs.loadProfile(ctx);
         print(await jobs.summarizePending(ctx, profile, { ...(flagInt(flags, "limit") !== undefined ? { limit: flagInt(flags, "limit") as number } : {}), ...(flagStr(flags, "since") ? { since: dateFlag(flags, "since") } : {}), heuristicOnly: flags["heuristic"] === true }));
+        return 0;
+      }
+      case "import-summaries": {
+        const file = positional[0] ?? flagStr(flags, "file");
+        if (!file) throw new Error("import-summaries needs a JSON file");
+        print(jobs.importSummaries(ctx, JSON.parse(readFileSync(file, "utf8"))));
         return 0;
       }
       case "score": {

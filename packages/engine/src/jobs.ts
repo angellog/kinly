@@ -21,7 +21,7 @@ import { fetchUserStars, readStarsFile, type UserStar } from "./sources/stars.js
 import { fetchAllTrending } from "./sources/trending-page.js";
 import { fetchVitaletsComments, parseVitaletsComment } from "./sources/vitalets-archive.js";
 import type { Store } from "./store/store.js";
-import type { CategoryId, Profile, RepoRecord, RepoView, Snapshot } from "./types.js";
+import { CATEGORY_IDS, type CategoryId, type Profile, type RepoRecord, type RepoView, type Snapshot } from "./types.js";
 import { addDays, dateRange, isoDate, isoNow, isoWeek } from "./util/dates.js";
 import { isFullName } from "./util/text.js";
 import { rankedList, rescoreAll, repoView } from "./views.js";
@@ -336,7 +336,8 @@ export function classifyAll(ctx: JobContext, options: { onlyUnclassified?: boole
   ctx.store.transaction(() => {
     for (const name of ctx.store.allRepoNames()) {
       const repo = ctx.store.getRepo(name);
-      if (!repo || repo.category_source === "owner") continue;
+      // Rules never overwrite a category the owner set or an LLM/curated pass refined.
+      if (!repo || repo.category_source === "owner" || repo.category_source === "llm") continue;
       if (options.onlyUnclassified && repo.category !== "other") continue;
       const c = classifyRepo(repo);
       if (c.category !== repo.category) ctx.store.setCategory(name, c.category, "rule");
@@ -767,4 +768,29 @@ export async function runWeekly(ctx: JobContext, options: { date?: string; publi
     }
   }
   return out;
+}
+
+/**
+ * Load hand- or agent-written summaries (JSON array of { full_name, summary,
+ * business_use, category? }). Used for the curated backfill of the repos the
+ * reports actually show; marked source "llm" with the current README hash so
+ * a later automatic pass only replaces them when the README changes.
+ */
+export function importSummaries(ctx: JobContext, entries: unknown): { applied: number; skipped: string[] } {
+  if (!Array.isArray(entries)) throw new Error("summaries file must be a JSON array");
+  let applied = 0;
+  const skipped: string[] = [];
+  for (const raw of entries) {
+    const e = raw as { full_name?: unknown; summary?: unknown; business_use?: unknown; category?: unknown };
+    const name = typeof e.full_name === "string" ? ctx.store.resolveAlias(e.full_name) : "";
+    const repo = name ? ctx.store.getRepo(name) : null;
+    if (!repo || typeof e.summary !== "string" || typeof e.business_use !== "string" || !e.summary.trim() || !e.business_use.trim()) {
+      skipped.push(String(e.full_name ?? "?"));
+      continue;
+    }
+    ctx.store.setSummary(name, { summary: e.summary, business_use: e.business_use, source: "llm", hash: repo.readme_hash ?? "" });
+    if (typeof e.category === "string" && (CATEGORY_IDS as readonly string[]).includes(e.category) && repo.category_source !== "owner") ctx.store.setCategory(name, e.category as CategoryId, "llm");
+    applied++;
+  }
+  return { applied, skipped };
 }

@@ -100,3 +100,23 @@ describe("boot import and publish guards (D3, D4, D5)", () => {
     store.close();
   });
 });
+
+describe("curated summaries", () => {
+  it("applies valid entries, follows aliases, and skips the rest", () => {
+    const { ctx, store } = context(offlineGitHub);
+    store.ingestSnapshot({ source: "trending-page", window: "daily", list_date: "2026-10-08", language_list: "all", fetched_at: "x", entries: [{ full_name: "new/name", rank: 1 }] });
+    store.renameRepo("old/name", "new/name");
+    const res = jobs.importSummaries(ctx, [
+      { full_name: "old/name", summary: "Does X for Y.", business_use: "Vantik could use it to Z.", category: "mcp-tools" },
+      { full_name: "missing/repo", summary: "a", business_use: "b" },
+      { full_name: "new/name", summary: "", business_use: "b" },
+    ]);
+    assert.equal(res.applied, 1);
+    assert.deepEqual(res.skipped, ["missing/repo", "new/name"]);
+    const r = store.getRepo("new/name");
+    assert.equal(r?.summary_source, "llm");
+    assert.equal(r?.category, "mcp-tools");
+    assert.throws(() => jobs.importSummaries(ctx, { not: "an array" }));
+    store.close();
+  });
+});
