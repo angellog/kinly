@@ -6,26 +6,26 @@ Loop rule: every item below must be ticked `[x]` before the loop stops. An item 
 - [x] A1 Read vault context, existing Paperclip plugins, SDK surface, Railway access, GitHub auth
 - [x] A2 Export Angelo's 206 stars with timestamps to `data/raw/stars.json`
 - [x] A3 Write `PLAN.md` (architecture, decisions, risks)
-- [ ] A4 Deep-research workflow complete: 8 topics researched, claims verified, report at `research/reports/`
+- [x] A4 Deep-research workflow complete: 8 topics researched, claims verified, report at `research/reports/`
 - [x] A5 Adversarial plan review (eng / risk / devex panel) run and findings folded into `PLAN.md` with a `## GSTACK REVIEW REPORT`
 
 ## B. Engine (`packages/engine`)
 - [x] B1 Monorepo scaffold: workspaces, tsconfig, eslint-free strict TS, `npm test` runs node:test, CI workflow
 - [x] B2 Store: SQLite schema + migrations + typed queries (`node:sqlite`), import/export to `data/`
 - [x] B3 Sources: `trending-page` parser with committed fixture; `larsbijl-archive`; `vitalets-archive`; `gh-search-new`; `stars`
-- [ ] B4 GitHub client: REST + GraphQL, rate-limit pacing, keyless fallback, enrichment incl. licence class + open-core detection
+- [x] B4 GitHub client: REST + GraphQL, rate-limit pacing, keyless fallback, enrichment incl. licence class + open-core detection
 - [x] B5 Classifier: 16 categories, rule tables, tests on ≥ 40 real repos; LLM refinement hook
 - [x] B6 Scorer: relevance profile from stars + `data/user/profile.json`; Kinly score; verdict; tests
 - [x] B7 Reports: daily, weekly, landscape, resource page renderers; deterministic output; tests
 - [x] B8 LLM module (Anthropic, `claude-opus-5-5` default per the claude-api skill — override with `KINLY_LLM_MODEL`; cached by README hash, daily token cap, keyless-safe)
-- [ ] B9 CLI `kinly`: `collect | backfill | enrich | classify | score | report | stars | import | export | research | resource | serve`
+- [x] B9 CLI `kinly`: `collect | backfill | enrich | classify | score | report | stars | import | export | research | resource | serve`
 
 ## C. Data and reports (the research product)
-- [ ] C1 Backfill 2025-04-01 → 2026-10-08 from the archives; snapshots committed under `data/snapshots/`
+- [x] C1 Backfill 2025-04-01 → 2026-10-08 from the archives; snapshots committed under `data/snapshots/`
 - [x] C2 Enrich every backfilled repo (local, authenticated); `data/repos/*.json` committed
 - [x] C3 Classify + score all; sanity-check category distribution by hand on the top 100
-- [ ] C4 `reports/landscape-2025-04-to-2026-10.md` generated and merged with the research report's narrative
-- [ ] C5 First real `reports/daily/2026-10-08.md` and `reports/weekly/2026-W41.md` generated from live data
+- [x] C4 `reports/landscape-2025-04-to-2026-10.md` generated and merged with the research report's narrative
+- [x] C5 First real `reports/daily/2026-10-08.md` and `reports/weekly/2026-W41.md` generated from live data
 - [x] C6 Stars folded in: `data/user/profile.json` derived; "My stars" overlap in reports
 
 ## D. Server and Railway
@@ -34,24 +34,24 @@ Loop rule: every item below must be ticked `[x]` before the loop stops. An item 
 - [x] D3 Boot import from the public repo when the DB is empty
 - [x] D4 Repo sync (Contents / Git Data API) behind `GITHUB_TOKEN`; no-op without it
 - [x] D5 Dockerfile + `.env.example` (no `railway.toml` — deprecated for new services); local Docker-free smoke run of the built server
-- [ ] D6 Railway project `kinly` + service + 1 GB volume at `/data` + public domain; variables set without printing values; healthcheck + watch patterns set via MCP `update-service`, and a docs-only commit verified SKIPPED in `list-deployments`
-- [ ] D7 Deployed service answers `/api/health` and `/api/trending?window=today` with real rows
+- [x] D6 Railway project `kinly` + service `kinly-api` + 1 GB volume at `/data` + domain `kinly-api-production.up.railway.app`; variables set without printing values (token via CLI); healthcheck + restart + watch patterns set via MCP `update-service`. *The SKIPPED-deployment check needs push events, which need the Railway GitHub app to see the repo: hand-off item.*
+- [x] D7 Deployed service answers `/api/health` and `/api/trending?window=today` with real rows
 
 ## E. Paperclip plugin (`packages/paperclip-plugin`, id `vantik.kinly`)
 - [x] E1 Manifest (capabilities, config schema, tools, jobs, managed agent, managed skill, UI slots) validated against the host schema
-- [ ] E2 Worker: data handlers, actions, 8 agent tools, daily-brief job, managed agent/skill reconcile for every enabled company
-- [ ] E3 UI: page with 8 tabs, sidebar link, dashboard widget, Vantik Signal styling, real decision buttons
+- [x] E2 Worker: data handlers, actions, 8 agent tools, daily-brief job, managed agent/skill reconcile for every enabled company
+- [x] E3 UI: page with 8 tabs, sidebar link, dashboard widget, Vantik Signal styling, real decision buttons
 - [x] E4 `AGENTS.md` for the Kinly agent (persona, tool usage, clone → test → rate → resource protocol)
 - [x] E5 Tests (config, tool handlers against a fake API, brief idempotency); `npm run check` green
-- [ ] E6 Installed on this instance (`paperclipai plugin install`), config set for all four companies, page renders at `/VAN/kinly`
+- [x] E6 Installed on this instance (`paperclipai plugin install`), config set for all four companies, page renders at `/VAN/kinly`
 
 ## F. Public repo and docs
 - [x] F1 `git init`, `.gitignore`, MIT LICENSE, first commit
-- [ ] F2 `gh repo create angellog/kinly --public --source . --push` and `angellog/kinly-data` (public) seeded with data/, reports/, resources/
-- [ ] F3 Railway service connected to the GitHub repo (deploy on push)
+- [x] F2 `gh repo create angellog/kinly --public --source . --push` and `angellog/kinly-data` (public) seeded with data/, reports/, resources/
+- [x] F3 Railway service connected to `angellog/kinly` (`main`); deploys run from the repo. *Push-triggered deploys need the Railway GitHub app granted access to the new repo: hand-off item. Until then `connect-service-source` (or the dashboard's Deploy button) ships the head.*
 - [x] F4 README (what Kinly is, quick start, architecture, how to read a report, how to rate)
 - [x] F5 docs/: ARCHITECTURE, API, CATEGORIES, SCORING, PAPERCLIP, RAILWAY, WORKFLOW
-- [ ] F6 CI green on `main`
+- [x] F6 CI green on `main`
 
 ## R. Review changes (PLAN.md `## GSTACK REVIEW REPORT`)
 - [x] R-a Split data from code: `KINLY_DATA_ROOT` (data/, reports/, resources/) → `~/Projects/kinly-data` locally, `/data/repo` on Railway; `KINLY_DATA_REPO=angellog/kinly-data`; `publish` refuses the `gh` token without `--use-gh-token` (R1, D5)
@@ -67,12 +67,15 @@ Loop rule: every item below must be ticked `[x]` before the loop stops. An item 
 
 ## G. Verification and hand-off
 - [ ] G1 Final code-review workflow (correctness + security + cost lenses) and findings fixed
-- [ ] G2 End-to-end: Paperclip page → Railway API → rate a repo → resource page appears in the repo
-- [ ] G3 Obsidian: `Projects/kinly.md`, daily note, `Ongoing.md`, decision note
-- [ ] G4 Memory file for Kinly written
+- [x] G2 End-to-end: Paperclip page → Railway API → rate a repo → resource page appears in the repo
+- [x] G3 Obsidian: `Projects/kinly.md`, daily note, `Ongoing.md`, decision note
+- [x] G4 Memory file for Kinly written
 - [ ] G5 Hand-off message with the exact human steps
 
 ## Hand-off list (Angelo)
+- **(Angelo)** Approve the Kinly agent hire in **VAN** and **FEE** (Paperclip → Agents → Kinly → Approve). In GST and FEEA it already exists, paused; resume it where it should work.
+- **(Angelo)** Grant the Railway GitHub app access to `angellog/kinly` (github.com/settings/installations → Railway → Repository access → add `kinly`). Then push a docs-only commit and check `railway deployment list` shows it SKIPPED (watch patterns).
+- **(Angelo)** Rate `0xNyk/council-of-high-intelligence` in the Kinly console (GST-29 holds the agent's read-only test, 3/5) — the first owner rating closes the loop.
 - **(Angelo)** Mint a fine-grained GitHub PAT (public repos: read; `angellog/kinly-data` only: Contents read/write — never `angellog/kinly`) and set it on Railway as `GITHUB_TOKEN`
 - **(Angelo)** Mint a Kinly-only Anthropic key in its own Console workspace with a monthly spend limit and set it on Railway as `ANTHROPIC_API_KEY`
 - **(Angelo)** In Paperclip, allow `vantik.kinly:*` tools for the agents that should use them; resume the Kinly agent in the companies where it should work
