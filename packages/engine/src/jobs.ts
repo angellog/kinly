@@ -508,9 +508,11 @@ export function exportData(ctx: JobContext): { repos: number; shards: number } {
 export function importReportFiles(ctx: JobContext): { reports: number; resources: number } {
   let reports = 0;
   let resources = 0;
+  // The published file is the record: load it when the store lacks it or holds a different version.
   const add = (kind: string, id: string, file: string): void => {
-    if (ctx.store.getReport(kind, id)) return;
-    ctx.store.saveReport(kind, id, readFileSync(file, "utf8"));
+    const markdown = readFileSync(file, "utf8");
+    if (ctx.store.getReport(kind, id)?.markdown === markdown) return;
+    ctx.store.saveReport(kind, id, markdown);
     reports++;
   };
   const dir = ctx.config.reportsDir;
