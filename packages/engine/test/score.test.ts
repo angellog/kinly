@@ -86,3 +86,21 @@ describe("relevance profile", () => {
     assert.ok(mcp.reasons.some((r) => r.includes("matches your stars")));
   });
 });
+
+describe("verdict guards", () => {
+  it("does not say BUILD for an unreadable licence", () => {
+    const r = repo("a/b", { stars: 200_000, license_spdx: "NOASSERTION", license_class: "unknown", latest_release_at: "2026-10-01T00:00:00Z", created_at: "2020-01-01T00:00:00Z" });
+    const s = kinlyScore(r, signals({ velocity_7d: 3000, distinct_weeks: 20, distinct_days: 40 }), 100, NOW);
+    assert.ok(s.total >= 70);
+    assert.equal(s.verdict, "WATCH");
+  });
+
+  it("caps relevance when the written use says it is not for the business", () => {
+    const profile = buildProfile([]);
+    const base = repo("a/mcp-voice", { category: "mcp-tools", description: "MCP voice assistant", topics: ["mcp"] });
+    const high = relevanceScore(base, profile).score;
+    const capped = relevanceScore({ ...base, summary_source: "llm", business_use: "Not useful to either business: hardware." }, profile).score;
+    assert.ok(high > 30);
+    assert.equal(capped, 30);
+  });
+});

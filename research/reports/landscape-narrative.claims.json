@@ -1,0 +1,307 @@
+[
+  {
+    "claim": "Sample: 98 repositories measured via GitHub star-history endpoint on 2026-10-12; March 2026 was the busiest month in the sample (676,621 stars across the sample).",
+    "source_url": "https://docs.github.com/en/rest/activity/starring?apiVersion=2026-03-10",
+    "verified": true
+  },
+  {
+    "claim": "openai/codex was created 2025-04-13, had its largest day on 2025-04-16 (9,059 stars) and has 128,671 stars as of 2026-10-12.",
+    "source_url": "https://api.github.com/repos/openai/codex/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "Gemini CLI was announced 2025-06-25, Apache 2.0, free tier of 60 requests/minute and 1,000/day during preview.",
+    "source_url": "https://blog.google/technology/developers/introducing-gemini-cli-open-source-ai-agent/",
+    "verified": true
+  },
+  {
+    "claim": "google-gemini/gemini-cli gained 17,854 stars on 2025-06-25 and has 107,286 stars as of 2026-10-12.",
+    "source_url": "https://api.github.com/repos/google-gemini/gemini-cli/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "anthropics/claude-code has 150,230 stars as of 2026-10-12; its largest day in the window was 2026-03-31 (9,658 stars).",
+    "source_url": "https://api.github.com/repos/anthropics/claude-code/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "Claude Code's source was exposed through an npm source map on 2026-03-31; Anthropic called it 'a release packaging issue caused by human error'.",
+    "source_url": "https://heise.de/-11242079",
+    "verified": true
+  },
+  {
+    "claim": "Claude Code's LICENSE.md reads 'All rights reserved' under Anthropic's Commercial Terms of Service.",
+    "source_url": "https://api.github.com/repos/anthropics/claude-code/contents/LICENSE.md",
+    "verified": true
+  },
+  {
+    "claim": "sst/opencode redirects to anomalyco/opencode, which has 212,731 stars as of 2026-10-12, 47,528 gained in January 2026.",
+    "source_url": "https://api.github.com/repos/anomalyco/opencode/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "charmbracelet/crush is licensed under FSL-1.1-MIT.",
+    "source_url": "https://api.github.com/repos/charmbracelet/crush/license",
+    "verified": true
+  },
+  {
+    "claim": "github/github-mcp-server's busiest 30 days began 2025-04-04 (12,422 stars); 33,523 stars as of 2026-10-12.",
+    "source_url": "https://api.github.com/repos/github/github-mcp-server/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "ChromeDevTools/chrome-devtools-mcp was created 2025-09-11 and gained 11,710 stars in the 30 days from 2025-09-23; 53,294 stars as of 2026-10-12.",
+    "source_url": "https://api.github.com/repos/ChromeDevTools/chrome-devtools-mcp/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "modelcontextprotocol/servers peaked before April 2025.",
+    "source_url": "https://api.github.com/repos/modelcontextprotocol/servers/stargazers/history",
+    "verified": false
+  },
+  {
+    "claim": "Anthropic donated MCP to the Agentic AI Foundation (Linux Foundation) on 2025-12-09, co-founded with OpenAI and Block; >10,000 active public MCP servers, 97M+ monthly SDK downloads.",
+    "source_url": "https://www.anthropic.com/news/donating-the-model-context-protocol-and-establishing-of-the-agentic-ai-foundation",
+    "verified": true
+  },
+  {
+    "claim": "modelcontextprotocol/servers is transitioning from MIT to Apache-2.0.",
+    "source_url": "https://api.github.com/repos/modelcontextprotocol/servers/license",
+    "verified": true
+  },
+  {
+    "claim": "Agent Skills were announced 2025-10-16 and published as an open standard (update dated 2025-12-18).",
+    "source_url": "https://claude.com/blog/skills",
+    "verified": true
+  },
+  {
+    "claim": "anthropics/skills was created 2025-09-22 and has 180,509 stars as of 2026-10-12.",
+    "source_url": "https://api.github.com/repos/anthropics/skills/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "anthropics/skills docx/pdf/pptx/xlsx skills are source-available, not open source.",
+    "source_url": "https://github.com/anthropics/skills",
+    "verified": true
+  },
+  {
+    "claim": "obra/superpowers has 297,708 stars as of 2026-10-12, 66,475 gained in the 30 days from 2026-03-12.",
+    "source_url": "https://api.github.com/repos/obra/superpowers/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "affaan-m/ECC has 277,214 stars as of 2026-10-12, 71,395 gained in March 2026.",
+    "source_url": "https://api.github.com/repos/affaan-m/ECC/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "GitHub announced Spec Kit on 2025-09-02; github/spec-kit gained 28,578 stars in 30 days from 2025-09-03 and has 140,842 as of 2026-10-12.",
+    "source_url": "https://github.blog/ai-and-ml/generative-ai/spec-driven-development-with-ai-get-started-with-a-new-open-source-toolkit/",
+    "verified": true
+  },
+  {
+    "claim": "OpenClaw was first released 2025-11-24, renamed Moltbot 2026-01-27 and OpenClaw 2026-01-30; creator announced joining OpenAI 2026-02-14.",
+    "source_url": "https://en.wikipedia.org/wiki/OpenClaw",
+    "verified": true
+  },
+  {
+    "claim": "openclaw/openclaw has 391,696 stars as of 2026-10-12; 25,714 on 2026-01-26; 200,805 in the 30 days from 2026-01-24.",
+    "source_url": "https://api.github.com/repos/openclaw/openclaw/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "OpenClaw security concerns: Cisco found a third-party skill exfiltrating data (2026-01-28); China restricted state entities (March 2026); review of OpenClaw 2.0 noted secrets unencrypted at rest and sandbox off by default (Aug 2026).",
+    "source_url": "https://en.wikipedia.org/wiki/OpenClaw",
+    "verified": true
+  },
+  {
+    "claim": "OpenClaw's README lists WhatsApp among its channels.",
+    "source_url": "https://github.com/openclaw/openclaw",
+    "verified": true
+  },
+  {
+    "claim": "paperclipai/paperclip was created 2026-03-02, gained 44,210 stars in 30 days from 2026-03-04, has 100,353 stars as of 2026-10-12, MIT.",
+    "source_url": "https://api.github.com/repos/paperclipai/paperclip/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "HKUDS/nanobot was created 2026-02-01 and gained 26,953 stars in its first 30 days.",
+    "source_url": "https://api.github.com/repos/HKUDS/nanobot/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "VoltAgent/awesome-design-md was created 2026-03-31 and gained 67,544 stars in its first 30 days; 120,318 as of 2026-10-12.",
+    "source_url": "https://api.github.com/repos/VoltAgent/awesome-design-md/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "cathrynlavery/diagram-design gained 31,696 stars in the 30 days from 2026-08-11; 50,296 as of 2026-10-12.",
+    "source_url": "https://api.github.com/repos/cathrynlavery/diagram-design/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "Leonxlnx/taste-skill's busiest 30 days began 2026-05-25 (30,443 stars).",
+    "source_url": "https://api.github.com/repos/Leonxlnx/taste-skill/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "n8n-io/n8n gained 13,885 stars in April 2025; 207,019 as of 2026-10-12.",
+    "source_url": "https://api.github.com/repos/n8n-io/n8n/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "n8n: .ee files require an Enterprise License; non-master branches unlicensed (Sustainable Use License).",
+    "source_url": "https://api.github.com/repos/n8n-io/n8n/license",
+    "verified": true
+  },
+  {
+    "claim": "Dify's modified Apache 2.0 bars multi-tenant operation without written authorisation.",
+    "source_url": "https://api.github.com/repos/langgenius/dify/license",
+    "verified": true
+  },
+  {
+    "claim": "firecrawl/firecrawl is AGPL-3.0, has 190,532 stars and gained 15-17k stars/month June-August 2026.",
+    "source_url": "https://api.github.com/repos/firecrawl/firecrawl/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "microsoft/markitdown gained 25,893 stars in April 2026 and 26,146 in June 2026.",
+    "source_url": "https://api.github.com/repos/microsoft/markitdown/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "thedotmack/claude-mem gained 27,128 stars in the 30 days from 2026-04-10; 99,730 as of 2026-10-12.",
+    "source_url": "https://api.github.com/repos/thedotmack/claude-mem/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "volcengine/OpenViking was created 2026-01-05, AGPL-3.0, 39,677 stars as of 2026-10-12.",
+    "source_url": "https://api.github.com/repos/volcengine/OpenViking/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "Octoverse fastest-growing projects by contributors (2025) include cline, vllm, ragflow, sglang and ComfyUI.",
+    "source_url": "https://github.blog/news-insights/octoverse/what-the-fastest-growing-tools-reveal-about-how-software-is-being-built/",
+    "verified": true
+  },
+  {
+    "claim": "openai/gpt-oss gained 6,039 stars on 2025-08-05; Apache-2.0.",
+    "source_url": "https://api.github.com/repos/openai/gpt-oss/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "karpathy/nanochat gained 7,923 stars on 2025-10-13 and 35,523 in its first 30 days.",
+    "source_url": "https://api.github.com/repos/karpathy/nanochat/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "Kimi-K2 is under a 'Modified MIT License'.",
+    "source_url": "https://api.github.com/repos/MoonshotAI/Kimi-K2/license",
+    "verified": true
+  },
+  {
+    "claim": "remotion-dev/skills was created 2026-01-19; remotion gained 11,482 stars in 30 days from 2026-01-20.",
+    "source_url": "https://api.github.com/repos/remotion-dev/skills",
+    "verified": true
+  },
+  {
+    "claim": "Remotion's surge in January 2026 was caused by its agent skills launch.",
+    "source_url": "https://www.remotion.dev/docs/ai/skills",
+    "verified": false
+  },
+  {
+    "claim": "heygen-com/hyperframes was created 2026-03-10, Apache-2.0, 60,958 stars as of 2026-10-12.",
+    "source_url": "https://api.github.com/repos/heygen-com/hyperframes/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "Remotion requires a company licence for for-profit organisations of a certain size.",
+    "source_url": "https://api.github.com/repos/remotion-dev/remotion/license",
+    "verified": true
+  },
+  {
+    "claim": "fish-speech is under the Fish Audio Research License; commercial use requires a separate licence.",
+    "source_url": "https://api.github.com/repos/fishaudio/fish-speech/license",
+    "verified": true
+  },
+  {
+    "claim": "aquasecurity/trivy gained 13,879 and google/osv-scanner 4,100 stars in the window.",
+    "source_url": "https://api.github.com/repos/aquasecurity/trivy/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "Shai-Hulud: GitHub notified 2025-09-14, removed 500+ packages; npm plan announced 2025-09-22 (2FA, 7-day granular tokens, trusted publishing).",
+    "source_url": "https://github.blog/security/supply-chain-security/our-plan-for-a-more-secure-npm-supply-chain/",
+    "verified": true
+  },
+  {
+    "claim": "GitHub restricted stargazer/subscriber listing endpoints to admins and collaborators (changelog 2026-06-30), citing misuse for spam.",
+    "source_url": "https://github.blog/changelog/2026-06-30-upcoming-access-restrictions-to-public-api-endpoints-and-ui-views/",
+    "verified": true
+  },
+  {
+    "claim": "Users reported /stargazers 404 from 2026-06-30 and GraphQL restriction from 2026-07-17.",
+    "source_url": "https://github.com/orgs/community/discussions/201209",
+    "verified": true
+  },
+  {
+    "claim": "Stargazer listing for openclaw/openclaw returned 404 to an authenticated non-collaborator on 2026-10-12.",
+    "source_url": "https://api.github.com/repos/openclaw/openclaw/stargazers",
+    "verified": true
+  },
+  {
+    "claim": "GET /repos/{owner}/{repo}/stargazers/history shipped 2026-09-04.",
+    "source_url": "https://github.blog/changelog/2026-09-04-new-api-endpoint-provides-privacy-safe-star-history-data/",
+    "verified": true
+  },
+  {
+    "claim": "Star history endpoint: per_page max 30, page max 100, weekly buckets with days[7] from Sunday, boundaries not guaranteed UTC.",
+    "source_url": "https://docs.github.com/en/rest/activity/starring?apiVersion=2026-03-10",
+    "verified": true
+  },
+  {
+    "claim": "Star history endpoint returned 200 unauthenticated on 2026-10-12.",
+    "source_url": "https://api.github.com/repos/openclaw/openclaw/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "Trending lists froze from 2025-11-13; staff acknowledged 2025-12-03 and reported a fix 2025-12-04.",
+    "source_url": "https://github.com/orgs/community/discussions/179946",
+    "verified": true
+  },
+  {
+    "claim": "A 2026-04-13 report of unchanged Go/Java trending lists received only a bot reply.",
+    "source_url": "https://github.com/orgs/community/discussions/192324",
+    "verified": true
+  },
+  {
+    "claim": "Trending showed 8 daily, 12 weekly, 22 monthly rows at 23:59 UTC on 2026-10-11.",
+    "source_url": "https://github.com/trending",
+    "verified": true
+  },
+  {
+    "claim": "GitHub's 2022 plan to retire Trending was reversed the next day (2022-09-02).",
+    "source_url": "https://github.com/orgs/community/discussions/31644",
+    "verified": true
+  },
+  {
+    "claim": "StarScout paper v2 (2025-09-06), 'Six Million (Suspected) Fake Stars'; fake stars surged in 2024 and promote for under two months.",
+    "source_url": "https://arxiv.org/abs/2412.13459",
+    "verified": true
+  },
+  {
+    "claim": "Octoverse 2025 (2025-10-28): 180M+ developers, 36M+ new, TypeScript #1 by contributors in August 2025.",
+    "source_url": "https://github.blog/news-insights/octoverse/octoverse-a-new-developer-joins-github-every-second-as-ai-leads-typescript-to-1/",
+    "verified": true
+  },
+  {
+    "claim": "openai/math created 2026-10-06 with 14,066 stars; storytold/photocraft 47,501 stars in 12 days with 9,715 on 2026-10-07.",
+    "source_url": "https://api.github.com/repos/storytold/photocraft/stargazers/history",
+    "verified": true
+  },
+  {
+    "claim": "Octoverse 2026 will publish in late October 2026.",
+    "source_url": "https://github.blog/news-insights/octoverse/octoverse-a-new-developer-joins-github-every-second-as-ai-leads-typescript-to-1/",
+    "verified": false
+  }
+]

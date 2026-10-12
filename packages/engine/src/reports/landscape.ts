@@ -5,7 +5,7 @@ import { CATEGORY_LABELS } from "../classify/rules.js";
 import { isoNow } from "../util/dates.js";
 import { fmtInt } from "../util/text.js";
 import { rankedList, repoView } from "../views.js";
-import { categoryLabel, footer, h1, licenseLabel, oneLiner, pickBlock, repoLink, table, verdictBadge } from "./markdown.js";
+import { businessUse, categoryLabel, footer, h1, licenseLabel, oneLiner, pickBlock, repoLink, table, verdictBadge } from "./markdown.js";
 
 export interface LandscapeOptions {
   from: string;
@@ -41,6 +41,17 @@ export function landscapeReport(store: Store, profile: Profile | null, options: 
     table(
       ["#", "Repository", "Weeks", "Stars", "Best week", "Category", "Licence", "Score", "Verdict", "What it does"],
       persistent.map((v) => [v.rank, repoLink(v.repo.full_name) + (v.starred ? " ⭐" : ""), v.signals.distinct_weeks, fmtInt(v.repo.stars), v.signals.peak_week_stars !== null ? `+${fmtInt(v.signals.peak_week_stars)}` : "—", categoryLabel(v.repo.category), licenseLabel(v), v.score.total, verdictBadge(v), oneLiner(v, 100)]),
+    ),
+  );
+
+  // The same persistence lens, kept to what the owner's profile calls relevant (relevance >= 50).
+  const relevant = rankedList(store, "persistent", profile, { date: options.to, since: options.from, limit: 25, candidates: 1500, min_relevance: 50 });
+  parts.push(`\n## Kept trending, and relevant to Vantik Systems or FeetBit\n`);
+  parts.push("_The persistent leaders filtered to relevance 50 or more: the eighteen months seen through the business, not through the C++ and Go lists that dominate the archive._\n");
+  parts.push(
+    table(
+      ["#", "Repository", "Weeks", "Stars", "Category", "Licence", "Verdict", "How you could use it"],
+      relevant.map((v) => [v.rank, repoLink(v.repo.full_name) + (v.starred ? " ⭐" : ""), v.signals.distinct_weeks, fmtInt(v.repo.stars), categoryLabel(v.repo.category), licenseLabel(v), verdictBadge(v), businessUse(v, 140)]),
     ),
   );
 

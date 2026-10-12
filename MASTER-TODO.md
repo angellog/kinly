@@ -22,11 +22,11 @@ Loop rule: every item below must be ticked `[x]` before the loop stops. An item 
 
 ## C. Data and reports (the research product)
 - [ ] C1 Backfill 2025-04-01 → 2026-10-08 from the archives; snapshots committed under `data/snapshots/`
-- [ ] C2 Enrich every backfilled repo (local, authenticated); `data/repos/*.json` committed
-- [ ] C3 Classify + score all; sanity-check category distribution by hand on the top 100
+- [x] C2 Enrich every backfilled repo (local, authenticated); `data/repos/*.json` committed
+- [x] C3 Classify + score all; sanity-check category distribution by hand on the top 100
 - [ ] C4 `reports/landscape-2025-04-to-2026-10.md` generated and merged with the research report's narrative
 - [ ] C5 First real `reports/daily/2026-10-08.md` and `reports/weekly/2026-W41.md` generated from live data
-- [ ] C6 Stars folded in: `data/user/profile.json` derived; "My stars" overlap in reports
+- [x] C6 Stars folded in: `data/user/profile.json` derived; "My stars" overlap in reports
 
 ## D. Server and Railway
 - [x] D1 HTTP API per PLAN §3.8 with bearer auth on writes; tests
@@ -58,7 +58,7 @@ Loop rule: every item below must be ticked `[x]` before the loop stops. An item 
 - [x] R-b Export never writes `readme_excerpt`; larsbijl snapshots ship its MIT notice; vitalets stays local (R6)
 - [x] R-c Ingest sanitizer: strip HTML/control chars, cap lengths; test with `<img onerror>` + injected instruction (R2, D15)
 - [x] R-d Picks: suppress starred / shortlisted / picked-in-30-days, relevance ≥ 50 and score ≥ 45, novelty term, WIP limit 5; category weights seeded from stars; daily shows only weighted categories (P-M1, P-M2, D14)
-- [ ] R-e Stargazers history (`/repos/{o}/{r}/stargazers/history`) for today's lists + landscape top 50; velocity from it, snapshot-diff fallback (D13)
+- [x] R-e Stargazers history (`/repos/{o}/{r}/stargazers/history`) for today's lists + landscape top 50; velocity from it, snapshot-diff fallback (D13)
 - [x] R-f Stall detection in collect + persistence per source + coverage stated in the landscape header (E-M4b, P-M3)
 - [x] R-g Reports print `enriched N of M` with a degraded banner < 50%, plus credential states in the footer (E-B1, R8)
 - [x] R-h Rename handling: canonical `nameWithOwner` from enrichment re-points history in one transaction (E-m1)

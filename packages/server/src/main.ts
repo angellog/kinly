@@ -33,17 +33,6 @@ async function main(): Promise<void> {
   const lock = makeLock();
   log(`db ${config.dbPath} · data ${config.dataRoot} → ${config.dataRepo} · github ${ctx.github.authenticated ? `token (${config.githubTokenSource})` : "keyless"} · llm ${ctx.llm.available ? ctx.llm.model : "off"} · writes ${config.apiToken ? "on" : "off (no KINLY_API_TOKEN)"}`);
 
-  if (store.stats().appearances === 0 && process.env["KINLY_BOOT_IMPORT"] !== "off") {
-    try {
-      const fetched = await jobs.fetchDataFromRepo(ctx);
-      const imported = jobs.importData(ctx);
-      log(`boot import: ${fetched.files} files fetched, ${imported.repos} repos, ${imported.snapshots} snapshot files, ${imported.appearances} appearances`);
-      jobs.scoreAll(ctx, jobs.loadProfile(ctx));
-    } catch (err) {
-      log(`boot import failed (the scheduler will collect fresh data): ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
   const schedulerOff = process.env["KINLY_SCHEDULER"] === "off";
   const scheduler = new Scheduler({
     store,
@@ -57,13 +46,28 @@ async function main(): Promise<void> {
       enrichKeyless: () => lock("enrich-keyless", () => jobs.enrichPending(ctx, { limit: 20 })),
     },
   });
-  if (!schedulerOff) scheduler.start();
-  else log("scheduler off (KINLY_SCHEDULER=off)");
 
   const handler = createApi({ ctx, scheduler, runExclusive: lock, version: process.env["RAILWAY_GIT_COMMIT_SHA"]?.slice(0, 7) ?? "0.1.0" });
   const server = createServer((req, res) => void handler(req, res));
   server.requestTimeout = 120_000;
   server.listen(config.port, "0.0.0.0", () => log(`listening on :${config.port}`));
+
+  // Listen first so the platform healthcheck passes; rebuild an empty store from the data repo in the background (D3),
+  // and only then start the scheduler, so a catch-up run never races the import.
+  void (async () => {
+    if (store.stats().appearances === 0 && process.env["KINLY_BOOT_IMPORT"] !== "off") {
+      try {
+        const fetched = await jobs.fetchDataFromRepo(ctx);
+        const imported = jobs.importData(ctx);
+        log(`boot import: ${fetched.files} files fetched, ${imported.repos} repos, ${imported.snapshots} snapshot files, ${imported.appearances} appearances`);
+        jobs.scoreAll(ctx, jobs.loadProfile(ctx));
+      } catch (err) {
+        log(`boot import failed (the scheduler will collect fresh data): ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    if (!schedulerOff) scheduler.start();
+    else log("scheduler off (KINLY_SCHEDULER=off)");
+  })();
 
   const shutdown = (signal: string): void => {
     log(`${signal}: shutting down`);

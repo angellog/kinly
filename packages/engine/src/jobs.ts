@@ -489,7 +489,33 @@ export function exportData(ctx: JobContext): { repos: number; shards: number } {
   return { repos: bundle.repos.length, shards: shards.size };
 }
 
-export function importData(ctx: JobContext): { repos: number; snapshots: number; appearances: number } {
+/** Load report and resource markdown from the data checkout into the store (only ids it does not have yet). */
+export function importReportFiles(ctx: JobContext): { reports: number; resources: number } {
+  let reports = 0;
+  let resources = 0;
+  const add = (kind: string, id: string, file: string): void => {
+    if (ctx.store.getReport(kind, id)) return;
+    ctx.store.saveReport(kind, id, readFileSync(file, "utf8"));
+    reports++;
+  };
+  const dir = ctx.config.reportsDir;
+  for (const kind of ["daily", "weekly"]) {
+    const sub = path.join(dir, kind);
+    if (existsSync(sub)) for (const f of readdirSync(sub)) if (/^[\w-]+\.md$/.test(f)) add(kind, f.slice(0, -3), path.join(sub, f));
+  }
+  if (existsSync(dir)) for (const f of readdirSync(dir)) if (/^landscape-[\w-]+\.md$/.test(f)) add("landscape", f.slice(0, -3), path.join(dir, f));
+  const res = ctx.config.resourcesDir;
+  if (existsSync(res))
+    for (const f of readdirSync(res)) {
+      const m = /^([\w.-]+)--([\w.-]+)\.md$/.exec(f);
+      if (!m || ctx.store.getResource(`${m[1]}/${m[2]}`)) continue;
+      ctx.store.saveResource(`${m[1]}/${m[2]}`, readFileSync(path.join(res, f), "utf8"));
+      resources++;
+    }
+  return { reports, resources };
+}
+
+export function importData(ctx: JobContext): { repos: number; snapshots: number; appearances: number; reports: number; resources: number } {
   const reposDir = path.join(ctx.config.dataDir, "repos");
   let repos = 0;
   if (existsSync(reposDir)) {
@@ -520,8 +546,9 @@ export function importData(ctx: JobContext): { repos: number; snapshots: number;
     ctx.store.replaceUserStars(stars.map((s) => ({ full_name: s.full_name, starred_at: s.starred_at })));
   }
   const snaps = importSnapshots(ctx);
-  ctx.log(`import: ${repos} repos, ${snaps.files} snapshot files`);
-  return { repos, snapshots: snaps.files, appearances: snaps.inserted };
+  const docs = importReportFiles(ctx);
+  ctx.log(`import: ${repos} repos, ${snaps.files} snapshot files, ${docs.reports} reports, ${docs.resources} resource pages`);
+  return { repos, snapshots: snaps.files, appearances: snaps.inserted, reports: docs.reports, resources: docs.resources };
 }
 
 /** Download the public repo's data/ tree (raw URLs) into dataDir, for a server with an empty disk. */
@@ -539,16 +566,21 @@ export async function fetchDataFromRepo(ctx: JobContext, options: { fetchImpl?: 
     return { files: 0 };
   }
   const list = JSON.parse(manifest) as { files: string[] };
+  const wanted = list.files.filter((rel) => /^(data\/[\w./-]+\.json|reports\/[\w./-]+\.md|resources\/[\w.-]+\.md)$/.test(rel) && !rel.includes(".."));
   let files = 0;
-  for (const rel of list.files) {
-    if (!rel.startsWith("data/") || rel.includes("..")) continue;
-    const text = await get(rel);
-    if (text === null) continue;
-    const out = path.join(ctx.config.dataRoot, rel);
-    mkdirSync(path.dirname(out), { recursive: true });
-    writeFileSync(out, text);
-    files++;
-  }
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < wanted.length) {
+      const rel = wanted[next++] as string;
+      const text = await get(rel).catch(() => null);
+      if (text === null) continue;
+      const out = path.join(ctx.config.dataRoot, rel);
+      mkdirSync(path.dirname(out), { recursive: true });
+      writeFileSync(out, text);
+      files++;
+    }
+  };
+  await Promise.all(Array.from({ length: 8 }, worker));
   ctx.log(`fetchDataFromRepo: ${files} files from ${dataRepo}`);
   return { files };
 }
@@ -569,6 +601,17 @@ export function writeDataManifest(ctx: JobContext): { files: number } {
     }
   };
   walk(dataDir);
+  // Reports and resource pages too, so a fresh server can serve them before its first run.
+  const walkMd = (dir: string): void => {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walkMd(full);
+      else if (entry.isFile() && entry.name.endsWith(".md")) files.push(path.relative(root, full).split(path.sep).join("/"));
+    }
+  };
+  walkMd(ctx.config.reportsDir);
+  walkMd(ctx.config.resourcesDir);
   files.sort();
   writeFileSync(path.join(dataDir, "manifest.json"), `${JSON.stringify({ generated_at: isoNow(), files }, null, 0)}\n`);
   return { files: files.length };

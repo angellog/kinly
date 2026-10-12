@@ -3,7 +3,7 @@ import { ageDays } from "../util/dates.js";
 
 /**
  * Kinly score 0..100 = adoption 30 + maintenance 20 + persistence 15 + licence 15 + relevance 20.
- * Verdict: BUILD (>= 70, not source-available, relevance >= 50) · WATCH (45..69) · SKIP (< 45 or archived).
+ * Verdict: BUILD (>= 70, a readable open-source licence, relevance >= 50) · WATCH (45..69, or >= 70 failing a BUILD condition) · SKIP (< 45 or archived).
  */
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -76,6 +76,8 @@ export function licenseScore(repo: RepoRecord): { score: number; reason: string 
   return { score: s, reason };
 }
 
+const OPEN_LICENCES = new Set(["permissive", "weak-copyleft", "strong-copyleft"]);
+
 export function kinlyScore(repo: RepoRecord, signals: TrendSignals, relevance: number, now?: string): ScoreBreakdown {
   const a = adoptionScore(repo, signals);
   const m = maintenanceScore(repo, now);
@@ -85,7 +87,8 @@ export function kinlyScore(repo: RepoRecord, signals: TrendSignals, relevance: n
   const total = clamp(a.score + m.score + p.score + l.score + r, 0, 100);
   let verdict: Verdict;
   if (repo.archived) verdict = "SKIP";
-  else if (total >= 70 && repo.license_class !== "source-available" && relevance >= 50) verdict = "BUILD";
+  // BUILD is advice to build on it, so the licence must be one Kinly could read and classify as open source.
+  else if (total >= 70 && OPEN_LICENCES.has(repo.license_class) && relevance >= 50) verdict = "BUILD";
   else if (total >= 45) verdict = "WATCH";
   else verdict = "SKIP";
   return {

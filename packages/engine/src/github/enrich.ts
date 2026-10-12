@@ -44,6 +44,8 @@ interface GqlRepo {
   readmeLower: { text: string } | null;
   readmeRst: { text: string } | null;
   licenseFile: { text: string } | null;
+  licenseMd: { text: string } | null;
+  licenseTxt: { text: string } | null;
   ee: { __typename: string } | null;
   enterprise: { __typename: string } | null;
 }
@@ -71,6 +73,8 @@ function buildQuery(names: readonly string[]): string {
       readmeLower: object(expression: "HEAD:readme.md") { ... on Blob { text } }
       readmeRst: object(expression: "HEAD:README.rst") { ... on Blob { text } }
       licenseFile: object(expression: "HEAD:LICENSE") { ... on Blob { text } }
+      licenseMd: object(expression: "HEAD:LICENSE.md") { ... on Blob { text } }
+      licenseTxt: object(expression: "HEAD:LICENSE.txt") { ... on Blob { text } }
       ee: object(expression: "HEAD:ee") { __typename }
       enterprise: object(expression: "HEAD:enterprise") { __typename }
     }
@@ -95,7 +99,7 @@ function fromGql(r: GqlRepo, requested: string): RepoMeta {
   const [owner, name] = r.nameWithOwner.split("/") as [string, string];
   const readme = r.readme?.text ?? r.readmeLower?.text ?? r.readmeRst?.text ?? null;
   const { excerpt, hash } = readmeExcerpt(readme);
-  const licenseText = r.licenseFile?.text ?? null;
+  const licenseText = r.licenseFile?.text ?? r.licenseMd?.text ?? r.licenseTxt?.text ?? null;
   const spdx = r.licenseInfo?.spdxId ?? null;
   const lic = classifyLicense(spdx, licenseText);
   const openCore = Boolean(r.ee || r.enterprise) || /\.ee\.|\/ee\//.test(readme ?? "") === true && lic.license_class === "source-available";

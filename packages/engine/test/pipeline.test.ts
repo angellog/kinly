@@ -69,7 +69,8 @@ describe("boot import and publish guards (D3, D4, D5)", () => {
   it("rebuilds an empty store from the data repo's manifest over raw URLs, refusing paths outside data/", async () => {
     const snapshot = { source: "larsbijl-archive", list_date: "2026-10-07", written_at: "x", lists: [{ source: "larsbijl-archive", window: "daily", list_date: "2026-10-07", language_list: "go", fetched_at: "x", entries: [{ full_name: "ollama/ollama", rank: 1 }] }] };
     const files: Record<string, string> = {
-      "data/manifest.json": JSON.stringify({ files: ["data/snapshots/larsbijl-archive/2026-10/2026-10-07.json", "../etc/passwd", "packages/evil.js"] }),
+      "data/manifest.json": JSON.stringify({ files: ["data/snapshots/larsbijl-archive/2026-10/2026-10-07.json", "reports/daily/2026-10-07.md", "../etc/passwd", "packages/evil.js"] }),
+      "reports/daily/2026-10-07.md": "# Kinly Daily — 2026-10-07\n",
       "data/snapshots/larsbijl-archive/2026-10/2026-10-07.json": JSON.stringify(snapshot),
     };
     const requested: string[] = [];
@@ -81,11 +82,13 @@ describe("boot import and publish guards (D3, D4, D5)", () => {
     }) as typeof fetch;
     const { ctx, store } = context(raw);
     const got = await jobs.fetchDataFromRepo(ctx, { fetchImpl: raw });
-    assert.equal(got.files, 1);
+    assert.equal(got.files, 2);
     assert.ok(!requested.some((u) => u.includes("passwd") || u.includes("evil")));
     const imported = jobs.importData(ctx);
     assert.ok(imported.appearances >= 1);
     assert.equal(store.signals("ollama/ollama").distinct_days, 1);
+    assert.equal(imported.reports, 1);
+    assert.match(store.getReport("daily", "2026-10-07")?.markdown ?? "", /Kinly Daily/);
     store.close();
   });
 

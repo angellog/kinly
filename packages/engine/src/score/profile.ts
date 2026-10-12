@@ -129,7 +129,7 @@ export function buildProfile(stars: readonly UserStar[], overrides: Partial<Prof
  * Relevance 0..100: category weight (up to 45) + keyword hits (up to 35) +
  * star-topic overlap (up to 20).
  */
-export function relevanceScore(repo: Pick<RepoRecord, "full_name" | "description" | "topics" | "category" | "readme_excerpt">, profile: Profile): { score: number; reasons: string[] } {
+export function relevanceScore(repo: Pick<RepoRecord, "full_name" | "description" | "topics" | "category" | "readme_excerpt"> & Partial<Pick<RepoRecord, "business_use" | "summary_source">>, profile: Profile): { score: number; reasons: string[] } {
   const reasons: string[] = [];
   const cw = profile.category_weights[repo.category] ?? 0.3;
   const categoryPart = 45 * cw;
@@ -157,6 +157,11 @@ export function relevanceScore(repo: Pick<RepoRecord, "full_name" | "description
   }
   const starPart = Math.min(20, st * 12);
   if (topicHits.length) reasons.push(`matches your stars: ${topicHits.slice(0, 4).join(", ")}`);
-  const score = Math.round(Math.min(100, categoryPart + keywordPart + starPart));
+  let score = Math.round(Math.min(100, categoryPart + keywordPart + starPart));
+  // A written judgement that it is not for this business outranks keyword overlap.
+  if (repo.summary_source === "llm" && repo.business_use && /^\s*(not (for|useful|relevant)|too heavy|no (direct )?use)/i.test(repo.business_use)) {
+    score = Math.min(score, 30);
+    reasons.push("judged not for Vantik or FeetBit");
+  }
   return { score, reasons };
 }
