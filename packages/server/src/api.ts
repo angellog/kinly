@@ -47,7 +47,7 @@ class HttpError extends Error {
 
 const MAX_BODY = 64 * 1024;
 const VERDICTS: readonly Verdict[] = ["BUILD", "WATCH", "SKIP"];
-const JOBS = ["daily", "weekly", "collect", "enrich", "score", "star-history", "export", "publish"] as const;
+const JOBS = ["daily", "weekly", "collect", "enrich", "score", "star-history", "export", "publish", "import"] as const;
 
 function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
   const json = JSON.stringify(body);
@@ -338,6 +338,12 @@ export function createApi(deps: ApiDeps): (req: IncomingMessage, res: ServerResp
                 return jobs.fetchStarHistories(ctx, ctx.store.list("today", { date, limit: 150 }).map((r) => r.full_name));
               case "export":
                 return { ...jobs.exportData(ctx), manifest: jobs.writeDataManifest(ctx) };
+              case "import": {
+                // Re-sync from the data repo: idempotent, newer-wins for repos, aliases merge split histories.
+                const fetched = await jobs.fetchDataFromRepo(ctx);
+                const imported = jobs.importData(ctx);
+                return { fetched, imported, scored: jobs.scoreAll(ctx, jobs.loadProfile(ctx)) };
+              }
               default:
                 return jobs.publishToRepo(ctx, { message: `kinly: manual publish ${date}` });
             }

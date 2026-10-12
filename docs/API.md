@@ -41,6 +41,6 @@ A **RepoView** has these fields:
 | `POST /api/repos/:o/:n/resource` | `{ test_log? }` | Writes the resource page and moves `rated` to `resourced` |
 | `POST /api/ask` | `{ question }` | An answer from the database (LLM, capped). Without a key, returns the closest repositories |
 | `POST /api/research` | `{ topic?, category? }` | A ranked list plus a synthesis |
-| `POST /api/jobs/run` | `{ job, date? }`, where `job` is `daily`, `weekly`, `collect`, `enrich`, `score`, `star-history`, `export` or `publish` | Runs one job. Answers `409` while another is running |
+| `POST /api/jobs/run` | `{ job, date? }`, where `job` is `daily`, `weekly`, `collect`, `enrich`, `score`, `star-history`, `export`, `publish` or `import` (re-sync from the data repo) | Runs one job. Answers `409` while another is running |
 
 Errors look like `{ "error": "…" }`, with status `400`, `401`, `404`, `409`, `413`, `429`, `503` (writes are off because no token is set), or `500`.

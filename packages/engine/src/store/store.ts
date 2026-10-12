@@ -891,6 +891,21 @@ export class Store {
     });
   }
 
+  listAliases(): Array<{ from_name: string; to_name: string }> {
+    return (this.db.prepare("SELECT from_name, to_name FROM aliases ORDER BY from_name").all() as Row[]).map((r) => ({ from_name: String(r["from_name"]), to_name: String(r["to_name"]) }));
+  }
+
+  /** Load aliases and fold any history already stored under an old name into the new one. */
+  importAliases(aliases: ReadonlyArray<{ from_name: string; to_name: string }>): number {
+    let n = 0;
+    for (const a of aliases) {
+      if (!isFullName(a.from_name) || !isFullName(a.to_name) || a.from_name === a.to_name) continue;
+      this.renameRepo(a.from_name, a.to_name);
+      n++;
+    }
+    return n;
+  }
+
   // ─── stargazers history (D13) ────────────────────────────────────────────
 
   saveStarWeeks(fullName: string, weeks: readonly StarWeek[], fetchedAt: string = isoNow()): void {

@@ -142,3 +142,20 @@ describe("store", () => {
     s.close();
   });
 });
+
+describe("aliases round trip", () => {
+  it("exports aliases and merges a split history on import", () => {
+    const a = new Store(":memory:");
+    a.renameRepo("old/name", "new/name");
+    const aliases = a.listAliases();
+    assert.deepEqual(aliases, [{ from_name: "old/name", to_name: "new/name" }]);
+    const b = new Store(":memory:");
+    b.ingestSnapshot(snap({ list_date: "2026-01-01", entries: [{ full_name: "old/name", rank: 1 }] }));
+    b.ingestSnapshot(snap({ list_date: "2026-01-02", entries: [{ full_name: "new/name", rank: 1 }] }));
+    assert.equal(b.importAliases(aliases), 1);
+    assert.equal(b.getRepo("old/name"), null);
+    assert.equal(b.signals("new/name").distinct_days, 2);
+    a.close();
+    b.close();
+  });
+});

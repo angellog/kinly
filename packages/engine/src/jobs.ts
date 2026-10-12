@@ -481,6 +481,8 @@ export function exportData(ctx: JobContext): { repos: number; shards: number } {
   mkdirSync(userDir, { recursive: true });
   writeFileSync(path.join(userDir, "shortlist.json"), `${JSON.stringify(bundle.shortlist, null, 2)}\n`);
   writeFileSync(path.join(userDir, "ratings.json"), `${JSON.stringify(bundle.ratings, null, 2)}\n`);
+  writeFileSync(path.join(userDir, "agent-ratings.json"), `${JSON.stringify(ctx.store.listAgentRatings(), null, 2)}\n`);
+  writeFileSync(path.join(ctx.config.dataDir, "aliases.json"), `${JSON.stringify(ctx.store.listAliases(), null, 0)}\n`);
   writeFileSync(
     path.join(ctx.config.dataDir, "index.json"),
     `${JSON.stringify({ exported_at: bundle.exported_at, repos: bundle.repos.length, appearances: bundle.appearances.length, shards: [...shards.keys()].sort(), stats: ctx.store.stats() }, null, 2)}\n`,
@@ -545,8 +547,15 @@ export function importData(ctx: JobContext): { repos: number; snapshots: number;
     const stars = readStarsFile(starsFile);
     ctx.store.replaceUserStars(stars.map((s) => ({ full_name: s.full_name, starred_at: s.starred_at })));
   }
+  for (const a of readJson<Array<{ full_name: string; rating: number; notes: string | null; test_log: string | null; agent: string | null }>>(path.join(userDir, "agent-ratings.json")) ?? []) {
+    if (isFullName(a.full_name) && !ctx.store.getAgentRating(a.full_name) && Number.isInteger(a.rating)) ctx.store.setAgentRating(a.full_name, a);
+  }
+  // Aliases before snapshots, so archive rows under an old name land on the current repo.
+  const aliases = readJson<Array<{ from_name: string; to_name: string }>>(path.join(ctx.config.dataDir, "aliases.json")) ?? [];
+  const merged = ctx.store.importAliases(aliases);
   const snaps = importSnapshots(ctx);
   const docs = importReportFiles(ctx);
+  if (merged) ctx.log(`import: ${merged} aliases applied`);
   ctx.log(`import: ${repos} repos, ${snaps.files} snapshot files, ${docs.reports} reports, ${docs.resources} resource pages`);
   return { repos, snapshots: snaps.files, appearances: snaps.inserted, reports: docs.reports, resources: docs.resources };
 }
@@ -656,6 +665,8 @@ function defaultPublishPaths(ctx: JobContext): string[] {
   add(path.join(ctx.config.dataDir, "user", "shortlist.json"));
   add(path.join(ctx.config.dataDir, "user", "ratings.json"));
   add(path.join(ctx.config.dataDir, "user", "profile.json"));
+  add(path.join(ctx.config.dataDir, "user", "agent-ratings.json"));
+  add(path.join(ctx.config.dataDir, "aliases.json"));
   add(path.join(ctx.config.dataDir, "index.json"));
   add(path.join(ctx.config.dataDir, "manifest.json"));
   const resDir = ctx.config.resourcesDir;
