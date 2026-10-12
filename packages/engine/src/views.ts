@@ -48,7 +48,9 @@ export interface ListOptions {
 /** A ranked list joined with repo views, filtered by category / relevance, re-ranked after filtering. */
 export function rankedList(store: Store, kind: ListKind, profile: Profile | null, options: ListOptions = {}): RankedView[] {
   const limit = Math.max(1, Math.min(200, options.limit ?? 10));
-  const candidates = Math.max(60, options.candidates ?? limit * 4);
+  // Filters run after the list query, so a filtered list needs a much deeper candidate pool.
+  const filtered = options.category !== undefined || typeof options.min_relevance === "number";
+  const candidates = Math.max(filtered ? 3000 : 60, options.candidates ?? limit * 4);
   const rows: ListRow[] = store.list(kind, { ...(options.date ? { date: options.date } : {}), limit: candidates, ...(options.since ? { since: options.since } : {}) });
   const out: RankedView[] = [];
   for (const row of rows) {

@@ -124,3 +124,17 @@ describe("api", () => {
     assert.equal(codes[0], 200);
   });
 });
+
+describe("api details", () => {
+  it("answers HEAD with headers and no body", async () => {
+    const r = await fetch(`${base}/api/trending?window=today&date=2026-10-08`, { method: "HEAD", headers: { "x-forwarded-for": "10.9.9.9" } });
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get("cache-control"), "public, max-age=300");
+    assert.equal(await r.text(), "");
+  });
+
+  it("finds category matches beyond the first candidates", async () => {
+    const r = (await (await get("/api/trending?window=today&date=2026-10-08&category=mcp-tools&limit=5")).json()) as { items: Array<{ repo: { full_name: string } }> };
+    assert.deepEqual(r.items.map((i) => i.repo.full_name), ["acme/mcp-instagram"]);
+  });
+});

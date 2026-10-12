@@ -51,6 +51,7 @@ const JOBS = ["daily", "weekly", "collect", "enrich", "score", "star-history", "
 
 function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
   const json = JSON.stringify(body);
+  const head = res.req?.method === "HEAD";
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "x-content-type-options": "nosniff",
@@ -58,7 +59,7 @@ function send(res: ServerResponse, status: number, body: unknown, headers: Recor
     "content-length": Buffer.byteLength(json),
     ...headers,
   });
-  res.end(json);
+  res.end(head ? undefined : json);
 }
 
 function intParam(url: URL, key: string, def: number, min: number, max: number): number {
@@ -149,11 +150,12 @@ export function createApi(deps: ApiDeps): (req: IncomingMessage, res: ServerResp
 
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://kinly.local");
-    const method = req.method ?? "GET";
+    const isHead = req.method === "HEAD";
+    const method = isHead ? "GET" : (req.method ?? "GET");
     const p = url.pathname.replace(/\/+$/, "") || "/";
     try {
       if (method === "OPTIONS") {
-        res.writeHead(204, { allow: "GET, POST, OPTIONS" });
+        res.writeHead(204, { allow: "GET, HEAD, POST, OPTIONS" });
         res.end();
         return;
       }
