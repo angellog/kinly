@@ -3,6 +3,8 @@ import { buildBrief, testIssue, upsertBrief, type BriefIssues } from "./brief.js
 import { FULL_NAME_RE, KinlyApi, KinlyApiError } from "./client.js";
 import { parseConfig, tokenAllowedFor, type KinlyCompanyConfig } from "./config.js";
 import { repoCard } from "./format.js";
+import { AGENTS_MD } from "./generated/instructions.js";
+import { instructionsStale } from "./managed.js";
 import { runTool, TOOL_DECLARATIONS } from "./tools.js";
 
 /**
@@ -55,7 +57,12 @@ const plugin = definePlugin({
         const current = await ctx.agents.managed.get("kinly", companyId);
         // A company that requires board approval for new agents holds the hire until a human approves it.
         if ((current.agent?.status as string | undefined) === "pending_approval") out["agent"] = "pending board approval";
-        else out["agent"] = (await ctx.agents.managed.reconcile("kinly", companyId)).status;
+        else {
+          const resolved = await ctx.agents.managed.reconcile("kinly", companyId);
+          out["agent"] = resolved.status;
+          // reconcile never rewrites instructions; after an upgrade that changed AGENTS.md, reset to the shipped text.
+          if (instructionsStale(resolved.agent, AGENTS_MD)) out["agent"] = `${(await ctx.agents.managed.reset("kinly", companyId)).status} (instructions refreshed)`;
+        }
       } catch (err) {
         out["agent"] = `error: ${err instanceof Error ? err.message : String(err)}`;
       }

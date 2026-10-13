@@ -15,6 +15,13 @@ Operating it: the agent can use its tools, the weekly report is always a whole w
 - `docs/PAPERCLIP.md`: why plugin tools are denied by default, the exact-name rule, and how to check an agent's access.
 - `CHANGELOG.md`.
 
+### Changed
+- The worker resets the managed Kinly agent when its stored instructions differ from the shipped `AGENTS.md`. The
+  host's reconcile never rewrites instructions, so after 0.1.0 every Kinly kept an older text (no read-only review
+  rule, no "test logs are public" rule). A reset also restores the plugin's declared defaults, which drops the host's
+  default `canCreateAgents` / `canCreateSkills` permissions: a researcher has no reason to hire agents.
+  Agents pending board approval are left alone.
+
 ### Fixed
 - A weekly report written while its week was still running (2026-W42, generated on its own Monday) was served as
   "the latest weekly". Weekly reports generated on or before the Sunday that ends their week are now dropped on boot

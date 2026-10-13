@@ -7,6 +7,7 @@ import { KinlyApi } from "../src/client.js";
 import { DEFAULT_API_URL, normalizeApiUrl, parseConfig, tokenAllowedFor } from "../src/config.js";
 import { fence } from "../src/format.js";
 import { AGENTS_MD, SKILL_MD } from "../src/generated/instructions.js";
+import { instructionsStale } from "../src/managed.js";
 import { runTool, TOOL_DECLARATIONS } from "../src/tools.js";
 
 const view = (name: string, over: Record<string, unknown> = {}) => ({
@@ -239,5 +240,18 @@ describe("grant-kinly-tools (H3)", async () => {
       { ...base, entries: [...entries, { selectorType: "risk_level", effect: "include", riskLevel: "read" }] },
     ];
     for (const c of cases) assert.equal(g.plan({ profiles: [c], names, agentId: "a1", boundAgentIds: ["a1"] }).profile, "update", JSON.stringify(c).slice(0, 80));
+  });
+});
+
+describe("managed agent instructions", () => {
+  const withText = (content: unknown) => ({ metadata: { pluginManagedAgent: { instructions: { content } } } });
+  it("is stale only when the stored text differs from the shipped AGENTS.md", () => {
+    assert.equal(instructionsStale(withText(AGENTS_MD), AGENTS_MD), false);
+    assert.equal(instructionsStale(withText("# old text"), AGENTS_MD), true);
+  });
+  it("never resets on missing or unreadable metadata", () => {
+    assert.equal(instructionsStale(null, AGENTS_MD), false);
+    assert.equal(instructionsStale({ metadata: null }, AGENTS_MD), false);
+    assert.equal(instructionsStale(withText(undefined), AGENTS_MD), false);
   });
 });
