@@ -54,7 +54,9 @@ describe("api", () => {
   it("answers health and status", async () => {
     const h = await get("/api/health");
     assert.equal(h.status, 200);
-    assert.equal(((await h.json()) as { ok: boolean }).ok, true);
+    const health = (await h.json()) as { ok: boolean; version: string; release: string };
+    assert.equal(health.ok, true);
+    assert.equal(typeof health.release, "string", "health names the package release alongside the commit");
     const pub = (await (await get("/api/status")).json()) as { credentials?: unknown; stats: { repos: number }; recent_runs?: unknown };
     assert.equal(pub.stats.repos, 2);
     assert.equal(pub.credentials, undefined, "credential state is not public");

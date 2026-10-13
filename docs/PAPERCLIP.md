@@ -46,13 +46,36 @@ paperclipai plugin install ./packages/paperclip-plugin   # first time
 paperclipai plugin upgrade vantik.kinly                  # after changes
 ```
 
-Then do three things in each company:
+Then, in every company (both scripts are board-only, run on this Mac, and idempotent):
 
-1. Create a secret holding the API token.
-2. Set `apiTokenRef` to that secret in the plugin settings.
-3. Allow the `vantik.kinly:*` tools for the agents that should use them.
+```bash
+node packages/paperclip-plugin/scripts/configure-companies.mjs   # token secret + plugin config
+node packages/paperclip-plugin/scripts/grant-kinly-tools.mjs     # let the Kinly agent call its tools
+node packages/paperclip-plugin/scripts/grant-kinly-tools.mjs --check   # read-only: report access, change nothing
+```
 
-Resume the Kinly agent only in companies where it should work.
+Approve the Kinly agent (Agents → Kinly → **Approve agent**) and resume it only in companies where it should work.
+
+## Tool access: why Kinly needs an access profile
+
+Paperclip **denies plugin tools to agents by default**. Installing the plugin and approving the agent is not enough:
+until an access profile assigned to the agent allows a tool, every call returns `deny_default`, and the agent does
+not even see the tool in its list.
+
+`grant-kinly-tools.mjs` keeps one profile per company, **Kinly tools**, that allows exactly the tools the manifest
+declares, and assigns it to the plugin-managed Kinly agent only (matched by its managed-resource record, never by
+its display name). Other agents get nothing. App profiles such as a company's GitHub default still apply on top.
+
+Doing it by hand: **Apps → Advanced setup → Access profiles → New profile → Start from scratch**, then **Advanced
+rules → Allow · Tool name pattern**, one rule per tool, then assign it to Kinly. Three traps:
+
+- **No wildcards.** Profile rules match the tool name exactly; `vantik.kinly:*` matches nothing.
+- **The tool picker lists connected apps only**, never plugin tools, so the rules are the only way in.
+- The wizard **saves a draft** as soon as you continue past the first step. A draft grants nothing.
+
+Check one agent without starting a run: `POST /api/companies/:id/tools/policy/test` with
+`{"companyId", "actor": {"actorType": "agent", "actorId", "agentId"}, "request": {"toolName": "vantik.kinly:trending",
+"providerType": "paperclip_plugin", "riskLevel": "read"}}`; `decision.decision` is `allow` or `deny`.
 
 ## Rotating the API token
 

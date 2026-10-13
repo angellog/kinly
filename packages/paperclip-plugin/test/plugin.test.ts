@@ -192,3 +192,52 @@ describe("review G1 hardening (plugin)", () => {
     assert.match(out.content ?? "", /^Kinly daily report 2026-10-12[\s\S]*<<<\n# hi ‹‹‹ escape\n>>>$/);
   });
 });
+
+describe("grant-kinly-tools (H3)", async () => {
+  // A plain .mjs script, loaded at run time so tsc does not need to type it.
+  const g = (await import(new URL("../../scripts/grant-kinly-tools.mjs", import.meta.url).href)) as {
+    toolNames: (m: { tools: Array<{ name: string }> }) => string[];
+    isKinlyAgent: (a: unknown) => boolean;
+    plan: (s: { profiles: unknown[]; names: string[]; agentId: string; boundAgentIds?: string[] }) => { profile: string; bind: boolean; entries: Array<{ toolName: string }> };
+  };
+  const names = g.toolNames({ tools: TOOL_DECLARATIONS });
+  const entries = names.map((toolName) => ({ selectorType: "tool_name", effect: "include", toolName }));
+
+  it("names every declared tool exactly, with no wildcard", () => {
+    assert.equal(names.length, TOOL_DECLARATIONS.length);
+    assert.ok(names.every((n) => /^vantik\.kinly:[a-z]+$/.test(n)));
+    assert.ok(names.includes("vantik.kinly:trending") && names.includes("vantik.kinly:rate"));
+  });
+
+  it("recognises the managed agent by its resource record, not its name", () => {
+    const managed = { name: "Someone", metadata: { paperclipManagedResource: { pluginKey: "vantik.kinly", resourceKind: "agent", resourceKey: "kinly" } } };
+    assert.equal(g.isKinlyAgent(managed), true);
+    assert.equal(g.isKinlyAgent({ name: "Kinly", metadata: {} }), false, "a hand-made agent called Kinly gets nothing");
+    assert.equal(g.isKinlyAgent({ name: "X", metadata: { paperclipManagedResource: { pluginKey: "other.plugin", resourceKind: "agent", resourceKey: "kinly" } } }), false);
+  });
+
+  it("creates and assigns when nothing exists", () => {
+    const p = g.plan({ profiles: [], names, agentId: "a1" });
+    assert.equal(p.profile, "create");
+    assert.equal(p.bind, true);
+    assert.deepEqual(p.entries.map((e) => e.toolName), names);
+  });
+
+  it("is a no-op when the profile is current and assigned", () => {
+    const profiles = [{ id: "p1", profileKey: "kinly-tools", name: "Kinly tools", status: "active", defaultAction: "deny", entries }];
+    assert.deepEqual(g.plan({ profiles, names, agentId: "a1", boundAgentIds: ["a1"] }).profile, "ok");
+    assert.equal(g.plan({ profiles, names, agentId: "a1", boundAgentIds: ["a1"] }).bind, false);
+  });
+
+  it("repairs a draft, a missing tool, a wildcard rule or an extra allow-all", () => {
+    const base = { id: "p1", name: "Kinly tools", status: "active", defaultAction: "deny" };
+    const cases = [
+      { ...base, status: "draft", entries: [] },
+      { ...base, entries: entries.slice(1) },
+      { ...base, entries: [{ selectorType: "tool_name", effect: "include", toolName: "vantik.kinly:*" }] },
+      { ...base, defaultAction: "allow", entries },
+      { ...base, entries: [...entries, { selectorType: "risk_level", effect: "include", riskLevel: "read" }] },
+    ];
+    for (const c of cases) assert.equal(g.plan({ profiles: [c], names, agentId: "a1", boundAgentIds: ["a1"] }).profile, "update", JSON.stringify(c).slice(0, 80));
+  });
+});

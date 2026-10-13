@@ -1,6 +1,6 @@
 {
   "name": "@kinly/server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Project Kinly HTTP API and scheduler (Railway).",
   "license": "MIT",
   "author": "Vantik Systems",

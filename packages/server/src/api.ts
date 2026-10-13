@@ -35,6 +35,8 @@ export interface ApiDeps {
   /** False while a fresh store is still being rebuilt; jobs answer 503 until then. */
   isReady?: () => boolean;
   version?: string;
+  /** The package release, e.g. 0.2.0; `version` is the deployed commit. */
+  release?: string;
   startedAt?: string;
 }
 
@@ -177,7 +179,7 @@ export function createApi(deps: ApiDeps): (req: IncomingMessage, res: ServerResp
         res.end();
         return;
       }
-      if (p === "/api/health") return send(res, 200, { ok: true, service: "kinly", version: deps.version ?? "0.1.0", started_at: startedAt });
+      if (p === "/api/health") return send(res, 200, { ok: true, service: "kinly", version: deps.version ?? deps.release ?? "unknown", release: deps.release ?? "unknown", started_at: startedAt });
       if (method === "GET" && !bucket.take(clientIp(req))) return send(res, 429, { error: "rate limited" }, { "retry-after": "30" });
 
       const cache = { "cache-control": "public, max-age=300" };

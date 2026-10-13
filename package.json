@@ -1,8 +1,8 @@
 {
   "name": "kinly",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Project Kinly by Vantik Systems \u2014 GitHub trend intelligence: what is trending, what trended, what it does, and how to use it in the business.",
+  "description": "Project Kinly by Vantik Systems — GitHub trend intelligence: what is trending, what trended, what it does, and how to use it in the business.",
   "license": "MIT",
   "author": "Vantik Systems",
   "type": "module",

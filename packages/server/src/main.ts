@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { jobs, loadConfig, Store } from "@kinly/engine";
 import { createApi } from "./api.js";
@@ -8,6 +9,14 @@ import { Scheduler } from "./scheduler.js";
  * is empty (D2), start the scheduler (D12), serve the API (PLAN §3.8).
  */
 
+/** The release in packages/server/package.json (dist/src/main.js → ../../package.json). */
+const release = ((): string => {
+  try {
+    return String((JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version?: string }).version ?? "unknown");
+  } catch {
+    return "unknown";
+  }
+})();
 const log = (m: string): void => console.log(`[kinly] ${new Date().toISOString()} ${m}`);
 
 /** One job at a time across the scheduler and the API. */
@@ -56,7 +65,7 @@ async function main(): Promise<void> {
   });
 
   let ready = false;
-  const handler = createApi({ ctx, scheduler, runExclusive: lock, isReady: () => ready, version: process.env["RAILWAY_GIT_COMMIT_SHA"]?.slice(0, 7) ?? "0.1.0" });
+  const handler = createApi({ ctx, scheduler, runExclusive: lock, isReady: () => ready, version: process.env["RAILWAY_GIT_COMMIT_SHA"]?.slice(0, 7) ?? release, release });
   const server = createServer((req, res) => void handler(req, res));
   server.requestTimeout = 120_000;
   // On Railway (or with KINLY_HOST) listen publicly; a local run stays on loopback.

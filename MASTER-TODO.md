@@ -78,8 +78,8 @@ Loop rule unchanged: ticked only when done **and** verified. **(Angelo)** items 
 
 - [x] H1 First unattended daily with the token is clean — `daily/2026-10-13` (05:41 UTC): no degraded banner, `enriched 60 of 60`, footer `github present`
 - [x] H2 Kinly can use its tools — a "Kinly tools" access profile (8 exact `vantik.kinly:*` names) assigned to Kinly in VAN, FEE, GST, FEEA; policy test: Kinly `allow` ×8 in all four, every other agent `deny`
-- [ ] H3 Tool access is reproducible — `packages/paperclip-plugin/scripts/grant-kinly-tools.mjs` (idempotent, `--check` read-only mode) committed; `docs/PAPERCLIP.md` explains default-deny, exact names, no wildcards
-- [ ] H4 A partial weekly is never served — weekly reports generated before their week ended are dropped on boot and import; `latest weekly` = last completed week; test; deployed; `/api/reports/latest?kind=weekly` answers `2026-W41`
+- [x] H3 Tool access is reproducible — `packages/paperclip-plugin/scripts/grant-kinly-tools.mjs` (idempotent, `--check` read-only mode) committed; `docs/PAPERCLIP.md` explains default-deny, exact names, no wildcards (verified: `--check` reports "keep profile; allowed all 8" in all four; 5 tests)
+- [x] H4 A partial weekly is never served — weekly reports generated before their week ended are dropped on boot and import; `latest weekly` = last completed week; test; deployed; `/api/reports/latest?kind=weekly` answers `2026-W41` (verified on 3400973; W42 partial dropped)
 - [ ] H5 Kinly works as an agent — one VAN issue assigned to Kinly; its run calls `vantik.kinly:trending` successfully and answers in the issue (read-only, no installs)
 - [ ] H6 Release v0.2.0 — versions bumped (root, 3 packages, plugin manifest), `CHANGELOG.md`, tag `v0.2.0` pushed, plugin upgraded in Paperclip, Railway `/api/health` version = head SHA, CI green
 - [ ] H7 Records — hand-off list rewritten, vault (`Projects/kinly.md`, daily note), memory updated
