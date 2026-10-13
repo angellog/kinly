@@ -80,12 +80,13 @@ Loop rule unchanged: ticked only when done **and** verified. **(Angelo)** items 
 - [x] H2 Kinly can use its tools — a "Kinly tools" access profile (8 exact `vantik.kinly:*` names) assigned to Kinly in VAN, FEE, GST, FEEA; policy test: Kinly `allow` ×8 in all four, every other agent `deny`
 - [x] H3 Tool access is reproducible — `packages/paperclip-plugin/scripts/grant-kinly-tools.mjs` (idempotent, `--check` read-only mode) committed; `docs/PAPERCLIP.md` explains default-deny, exact names, no wildcards (verified: `--check` reports "keep profile; allowed all 8" in all four; 5 tests)
 - [x] H4 A partial weekly is never served — weekly reports generated before their week ended are dropped on boot and import; `latest weekly` = last completed week; test; deployed; `/api/reports/latest?kind=weekly` answers `2026-W41` (verified on 3400973; W42 partial dropped)
-- [ ] H5 Kinly works as an agent — one VAN issue assigned to Kinly; its run calls `vantik.kinly:trending` successfully and answers in the issue (read-only, no installs)
+- [ ] H5 Kinly works as an agent — one VAN issue assigned to Kinly; its run calls `vantik.kinly:trending` successfully and answers in the issue (read-only, no installs). *Filed as VAN-66 (2026-10-14 ~00:00 UTC). The run started and failed before any tool call: "Failed to authenticate: OAuth session expired". This blocks every `claude_local` agent on this Mac (Avast, Beacon and Splice too), not Kinly alone. Blocked on H12; retry VAN-66 after it.*
 - [ ] H6 Release v0.2.0 — versions bumped (root, 3 packages, plugin manifest), `CHANGELOG.md`, tag `v0.2.0` pushed, plugin upgraded in Paperclip, Railway `/api/health` version = head SHA, CI green
 - [ ] H7 Records — hand-off list rewritten, vault (`Projects/kinly.md`, daily note), memory updated
 - [ ] H8 **(Angelo)** Approve Kinly in **FEE** — evidence: agent status is not `pending_approval`
 - [ ] H9 **(Angelo)** Railway GitHub app can see `angellog/kinly` — evidence: a push creates a deployment by itself
 - [ ] H10 **(Angelo)** Kinly-only Anthropic key on Railway — evidence: a report footer says `anthropic present`
+- [ ] H12 **(Angelo)** Sign the Mac's Claude Code back in, so `claude_local` agents can run — in a terminal: `claude`, then `/login`; then reset Kinly (agent page → Resume/Retry) and re-run VAN-66. Evidence: Kinly's VAN-66 run completes without an auth error
 - [ ] H11 **(Angelo)** Rate GST-29 (`0xNyk/council-of-high-intelligence`) — evidence: an owner rating exists and the repo is `rated`
 
 ## Hand-off list (Angelo)
