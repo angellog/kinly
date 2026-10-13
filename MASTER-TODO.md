@@ -81,7 +81,7 @@ Loop rule unchanged: ticked only when done **and** verified. **(Angelo)** items 
 - [x] H3 Tool access is reproducible — `packages/paperclip-plugin/scripts/grant-kinly-tools.mjs` (idempotent, `--check` read-only mode) committed; `docs/PAPERCLIP.md` explains default-deny, exact names, no wildcards (verified: `--check` reports "keep profile; allowed all 8" in all four; 5 tests)
 - [x] H4 A partial weekly is never served — weekly reports generated before their week ended are dropped on boot and import; `latest weekly` = last completed week; test; deployed; `/api/reports/latest?kind=weekly` answers `2026-W41` (verified on 3400973; W42 partial dropped)
 - [ ] H5 Kinly works as an agent — one VAN issue assigned to Kinly; its run calls `vantik.kinly:trending` successfully and answers in the issue (read-only, no installs). *Filed as VAN-66 (2026-10-14 ~00:00 UTC). The run started and failed before any tool call: "Failed to authenticate: OAuth session expired". This blocks every `claude_local` agent on this Mac (Avast, Beacon and Splice too), not Kinly alone. Blocked on H12; retry VAN-66 after it.*
-- [ ] H6 Release v0.2.0 — versions bumped (root, 3 packages, plugin manifest), `CHANGELOG.md`, tag `v0.2.0` pushed, plugin upgraded in Paperclip, Railway `/api/health` version = head SHA, CI green
+- [ ] H6 Release v0.2.0 — versions bumped (root, 3 packages, plugin manifest), `CHANGELOG.md`, tag `v0.2.0` pushed, plugin upgraded in Paperclip (managed agents' instructions refreshed), Railway `/api/health` version = the tagged commit with `release: 0.2.0`, CI green
 - [ ] H7 Records — hand-off list rewritten, vault (`Projects/kinly.md`, daily note), memory updated
 - [ ] H8 **(Angelo)** Approve Kinly in **FEE** — evidence: agent status is not `pending_approval`
 - [ ] H9 **(Angelo)** Railway GitHub app can see `angellog/kinly` — evidence: a push creates a deployment by itself
@@ -90,6 +90,7 @@ Loop rule unchanged: ticked only when done **and** verified. **(Angelo)** items 
 - [ ] H11 **(Angelo)** Rate GST-29 (`0xNyk/council-of-high-intelligence`) — evidence: an owner rating exists and the repo is `rated`
 
 ## Hand-off list (Angelo)
+- **(Angelo) — blocks every Paperclip agent on this Mac, not just Kinly:** the Mac's Claude Code login has expired ("OAuth session expired and could not be refreshed"; Avast, Beacon, Splice and Kinly are in `error`). In a terminal run `claude`, then `/login`. Then open each agent in `error` and resume it, and re-run VAN-66 (Kinly's read-only tool check). (H12)
 - **(Angelo)** Approve Kinly in **FEE**: http://127.0.0.1:3100/FEE/agents/kinly/overview → **Approve agent** (VAN approved 2026-10-14). GST and FEEA are paused: **Resume** where it should work.
 - **(Angelo)** Grant the Railway GitHub app access to `angellog/kinly` (github.com/settings/installations → Railway → Repository access → add `kinly`). Then push a docs-only commit and check `railway deployment list` shows it SKIPPED (watch patterns).
 - **(Angelo)** Rate `0xNyk/council-of-high-intelligence` in the Kinly console (GST-29 holds the agent's read-only test, 3/5) — the first owner rating closes the loop.
