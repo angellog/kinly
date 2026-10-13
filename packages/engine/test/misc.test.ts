@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { gitBlobSha } from "../src/github/publish.js";
 import { heuristicSummary, Llm } from "../src/llm/anthropic.js";
 import { Store } from "../src/store/store.js";
-import { addDays, dateRange, isIsoDate, isoWeek, monthStart, weekStart } from "../src/util/dates.js";
+import { addDays, dateRange, isIsoDate, isoWeek, isoWeekEnd, monthStart, weekStart } from "../src/util/dates.js";
 import { isFullName, parseCount } from "../src/util/text.js";
 import { repo } from "./helpers.js";
 
@@ -13,6 +13,11 @@ describe("dates", () => {
     assert.equal(isoWeek("2026-01-01"), "2026-W01");
     assert.equal(isoWeek("2027-01-01"), "2026-W53");
     assert.equal(weekStart("2026-10-08"), "2026-10-05");
+    assert.equal(isoWeekEnd("2026-W41"), "2026-10-11");
+    assert.equal(isoWeekEnd("2026-W01"), "2026-01-04");
+    assert.equal(isoWeekEnd("2026-W53"), "2027-01-03");
+    assert.equal(isoWeekEnd("2025-W53"), null, "2025 has 52 ISO weeks");
+    assert.equal(isoWeekEnd("2026-41"), null);
     assert.equal(weekStart("2026-10-05"), "2026-10-05");
     assert.equal(monthStart("2026-10-08"), "2026-10-01");
     assert.equal(addDays("2026-03-01", -1), "2026-02-28");

@@ -26,7 +26,7 @@ import {
   type Verdict,
   type Window,
 } from "../types.js";
-import { addDays, isoNow, monthStart, weekStart } from "../util/dates.js";
+import { addDays, isoNow, isoWeekEnd, monthStart, weekStart } from "../util/dates.js";
 import { cleanText, cleanTopics, cleanUrl, isFullName, redactSecrets } from "../util/text.js";
 
 type Row = Record<string, SQLInputValue>;
@@ -1033,13 +1033,30 @@ export class Store {
 
   // ─── reports / resources ─────────────────────────────────────────────────
 
-  saveReport(kind: string, id: string, markdown: string): void {
+  saveReport(kind: string, id: string, markdown: string, options: { generatedAt?: string } = {}): void {
     this.db
       .prepare(
         `INSERT INTO reports (kind, id, generated_at, markdown) VALUES (?, ?, ?, ?)
          ON CONFLICT(kind, id) DO UPDATE SET generated_at = excluded.generated_at, markdown = excluded.markdown`,
       )
-      .run(kind, id, isoNow(), markdown);
+      .run(kind, id, options.generatedAt ?? isoNow(), markdown);
+  }
+
+  /**
+   * Delete weekly reports generated on or before the Sunday that ends their week. Such a report covers a week still
+   * in progress and must never be served as "the latest weekly". Returns the ids dropped.
+   */
+  dropPartialWeeklies(): string[] {
+    const rows = this.db.prepare("SELECT id, generated_at FROM reports WHERE kind = 'weekly'").all() as Row[];
+    const dropped = rows
+      .filter((r) => {
+        const end = isoWeekEnd(String(r["id"]));
+        return end !== null && String(r["generated_at"]).slice(0, 10) <= end;
+      })
+      .map((r) => String(r["id"]));
+    const del = this.db.prepare("DELETE FROM reports WHERE kind = 'weekly' AND id = ?");
+    for (const id of dropped) del.run(id);
+    return dropped;
   }
 
   getReport(kind: string, id: string): { kind: string; id: string; generated_at: string; markdown: string } | null {

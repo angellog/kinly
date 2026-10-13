@@ -571,7 +571,9 @@ export function importData(ctx: JobContext): { repos: number; snapshots: number;
   const merged = ctx.store.importAliases(aliases);
   const snaps = importSnapshots(ctx);
   const docs = importReportFiles(ctx);
+  const partial = ctx.store.dropPartialWeeklies();
   if (merged) ctx.log(`import: ${merged} aliases applied`);
+  if (partial.length) ctx.log(`import: dropped partial weekly ${partial.join(", ")}`);
   ctx.log(`import: ${repos} repos, ${snaps.files} snapshot files, ${docs.reports} reports, ${docs.resources} resource pages`);
   return { repos, snapshots: snaps.files, appearances: snaps.inserted, reports: docs.reports, resources: docs.resources };
 }

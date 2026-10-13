@@ -38,6 +38,14 @@ export function weekStart(date: string): string {
   return isoDate(d);
 }
 
+/** The Sunday that ends ISO week `id` (2026-W41 → 2026-10-11); null for a malformed or non-existent week. */
+export function isoWeekEnd(id: string): string | null {
+  const m = /^(\d{4})-W(\d{2})$/.exec(id);
+  if (!m) return null;
+  const monday = addDays(weekStart(`${m[1]}-01-04`), (Number(m[2]) - 1) * 7);
+  return isoWeek(monday) === id ? addDays(monday, 6) : null;
+}
+
 /** First day of the month of `date`. */
 export function monthStart(date: string): string {
   return `${date.slice(0, 7)}-01`;

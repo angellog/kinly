@@ -35,6 +35,8 @@ async function main(): Promise<void> {
     config.apiToken = null;
   }
   const store = new Store(config.dbPath);
+  // A weekly report written while its week was still running is partial; never serve it (H4).
+  const partialWeeklies = store.dropPartialWeeklies();
   const ctx = jobs.makeContext(store, config, { log });
   const lock = makeLock();
   log(`db ${config.dbPath} · data ${config.dataRoot} → ${config.dataRepo} · github ${ctx.github.authenticated ? `token (${config.githubTokenSource})` : "keyless"} · llm ${ctx.llm.available ? ctx.llm.model : "off"} · writes ${config.apiToken ? "on" : "off (no KINLY_API_TOKEN)"}`);
@@ -60,6 +62,7 @@ async function main(): Promise<void> {
   // On Railway (or with KINLY_HOST) listen publicly; a local run stays on loopback.
   const host = process.env["KINLY_HOST"] ?? (process.env["RAILWAY_ENVIRONMENT"] ? "0.0.0.0" : "127.0.0.1");
   server.listen(config.port, host, () => log(`listening on ${host}:${config.port}`));
+  if (partialWeeklies.length) log(`dropped partial weekly report(s): ${partialWeeklies.join(", ")}`);
 
   // Listen first so the platform healthcheck passes; rebuild an empty store from the data repo in the background (D3),
   // and only then start the scheduler, so a catch-up run never races the import.

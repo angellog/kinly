@@ -215,3 +215,17 @@ describe("import keeps curated decisions", () => {
     s.close();
   });
 });
+
+describe("partial weekly reports (H4)", () => {
+  it("drops a weekly generated before its week ended and keeps completed ones", () => {
+    const s = new Store(":memory:");
+    s.saveReport("weekly", "2026-W41", "# W41", { generatedAt: "2026-10-12T05:40:00Z" }); // Monday after: complete
+    s.saveReport("weekly", "2026-W42", "# W42 so far", { generatedAt: "2026-10-12T00:12:43Z" }); // its own Monday: partial
+    s.saveReport("weekly", "2026-W40", "# W40", { generatedAt: "2026-10-04T23:59:00Z" }); // its own Sunday: still partial
+    s.saveReport("daily", "2026-10-12", "# daily", { generatedAt: "2026-10-12T05:41:00Z" });
+    assert.deepEqual(s.dropPartialWeeklies().sort(), ["2026-W40", "2026-W42"]);
+    assert.equal(s.latestReport("weekly")?.id, "2026-W41");
+    assert.equal(s.latestReport("daily")?.id, "2026-10-12", "dailies are untouched");
+    assert.deepEqual(s.dropPartialWeeklies(), [], "idempotent");
+  });
+});

@@ -72,10 +72,26 @@ Loop rule: every item below must be ticked `[x]` before the loop stops. An item 
 - [x] G4 Memory file for Kinly written
 - [x] G5 Hand-off message with the exact human steps
 
+## H. v0.2.0 — operate it (added 2026-10-14)
+
+Loop rule unchanged: ticked only when done **and** verified. **(Angelo)** items are ticked when the evidence exists; the loop checks for it every tick and never performs the step itself.
+
+- [x] H1 First unattended daily with the token is clean — `daily/2026-10-13` (05:41 UTC): no degraded banner, `enriched 60 of 60`, footer `github present`
+- [x] H2 Kinly can use its tools — a "Kinly tools" access profile (8 exact `vantik.kinly:*` names) assigned to Kinly in VAN, FEE, GST, FEEA; policy test: Kinly `allow` ×8 in all four, every other agent `deny`
+- [ ] H3 Tool access is reproducible — `packages/paperclip-plugin/scripts/grant-kinly-tools.mjs` (idempotent, `--check` read-only mode) committed; `docs/PAPERCLIP.md` explains default-deny, exact names, no wildcards
+- [ ] H4 A partial weekly is never served — weekly reports generated before their week ended are dropped on boot and import; `latest weekly` = last completed week; test; deployed; `/api/reports/latest?kind=weekly` answers `2026-W41`
+- [ ] H5 Kinly works as an agent — one VAN issue assigned to Kinly; its run calls `vantik.kinly:trending` successfully and answers in the issue (read-only, no installs)
+- [ ] H6 Release v0.2.0 — versions bumped (root, 3 packages, plugin manifest), `CHANGELOG.md`, tag `v0.2.0` pushed, plugin upgraded in Paperclip, Railway `/api/health` version = head SHA, CI green
+- [ ] H7 Records — hand-off list rewritten, vault (`Projects/kinly.md`, daily note), memory updated
+- [ ] H8 **(Angelo)** Approve Kinly in **FEE** — evidence: agent status is not `pending_approval`
+- [ ] H9 **(Angelo)** Railway GitHub app can see `angellog/kinly` — evidence: a push creates a deployment by itself
+- [ ] H10 **(Angelo)** Kinly-only Anthropic key on Railway — evidence: a report footer says `anthropic present`
+- [ ] H11 **(Angelo)** Rate GST-29 (`0xNyk/council-of-high-intelligence`) — evidence: an owner rating exists and the repo is `rated`
+
 ## Hand-off list (Angelo)
-- **(Angelo)** Approve the Kinly agent hire in **VAN** and **FEE** (Paperclip → Agents → Kinly → Approve). In GST and FEEA it already exists, paused; resume it where it should work.
+- **(Angelo)** Approve Kinly in **FEE**: http://127.0.0.1:3100/FEE/agents/kinly/overview → **Approve agent** (VAN approved 2026-10-14). GST and FEEA are paused: **Resume** where it should work.
 - **(Angelo)** Grant the Railway GitHub app access to `angellog/kinly` (github.com/settings/installations → Railway → Repository access → add `kinly`). Then push a docs-only commit and check `railway deployment list` shows it SKIPPED (watch patterns).
 - **(Angelo)** Rate `0xNyk/council-of-high-intelligence` in the Kinly console (GST-29 holds the agent's read-only test, 3/5) — the first owner rating closes the loop.
 - ~~**(Angelo)** Mint a fine-grained GitHub PAT~~ **Done 2026-10-12** — set on Railway, first publish verified (`5542e87`). Original item: Mint a fine-grained GitHub PAT (`angellog/kinly-data` only, Contents read/write; never `angellog/kinly`) and set it on Railway as `GITHUB_TOKEN`. Exact steps: `docs/RAILWAY.md` → Adding the GitHub token
 - **(Angelo)** Mint a Kinly-only Anthropic key in its own Console workspace with a monthly spend limit and set it on Railway as `ANTHROPIC_API_KEY`
-- **(Angelo)** In Paperclip, allow `vantik.kinly:*` tools for the agents that should use them; resume the Kinly agent in the companies where it should work
+- ~~**(Angelo)** Allow `vantik.kinly:*` tools~~ **Done 2026-10-14** — "Kinly tools" access profile in all four companies, assigned to Kinly only (H2)
