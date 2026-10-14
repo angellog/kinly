@@ -3,6 +3,14 @@
 All notable changes to Project Kinly. Versions follow [semver](https://semver.org); the API's `/api/health` reports
 the deployed commit as `version` and the package release as `release`.
 
+## Unreleased
+
+### Fixed
+- The Kinly agent could not find its tools. In a `claude_local` (ACP) run, Paperclip delivers only connected-app MCP
+  tools to the session; plugin tools are reached over `POST /api/plugins/tools/execute` with the run's own agent key.
+  `AGENTS.md` and the `kinly` skill now say so and carry a `kinly <tool> '<json>'` helper built only from the
+  variables Paperclip sets for every run (verified against the live route). Found by the VAN-66 smoke test.
+
 ## 0.2.0 — 2026-10-14
 
 Operating it: the agent can use its tools, the weekly report is always a whole week, and the setup is reproducible.
