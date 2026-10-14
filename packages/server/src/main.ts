@@ -44,9 +44,9 @@ async function main(): Promise<void> {
     config.apiToken = null;
   }
   const store = new Store(config.dbPath);
-  // A weekly report written while its week was still running is partial; never serve it (H4).
-  const partialWeeklies = store.dropPartialWeeklies();
   const ctx = jobs.makeContext(store, config, { log });
+  // A weekly report written while its week was still running is partial; never serve or publish it (H4).
+  const partialWeeklies = jobs.dropPartialWeeklyReports(ctx);
   const lock = makeLock();
   log(`db ${config.dbPath} · data ${config.dataRoot} → ${config.dataRepo} · github ${ctx.github.authenticated ? `token (${config.githubTokenSource})` : "keyless"} · llm ${ctx.llm.available ? ctx.llm.model : "off"} · writes ${config.apiToken ? "on" : "off (no KINLY_API_TOKEN)"}`);
 

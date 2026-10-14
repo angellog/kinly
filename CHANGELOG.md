@@ -14,6 +14,11 @@ the deployed commit as `version` and the package release as `release`.
   one by a full topic's weight (`RECLASSIFY_MARGIN`). Each heuristic business line is then realigned with its repo's
   category, rewriting only a line that is another category's template; summaries and model-written lines are never
   touched. `RULES_VERSION` 3 runs this once. Tests pin the README-less case, the narrow-margin case and the LLM case.
+- **A stale manifest blocked every import.** The partial W42 weekly was removed from `kinly-data`, but its file stayed in
+  the server's working copy, so the next export listed it again and the all-or-nothing import refused the whole repo
+  (which would also have stopped a fresh boot). Dropping a partial weekly now deletes its file too; the stale manifest
+  entry was removed by hand. The import now pins every file to the branch's current commit, so the raw CDN can never
+  serve a cached manifest that disagrees with the files, and it realigns heuristic business lines after importing.
 
 ## 0.2.1 — 2026-10-14
 

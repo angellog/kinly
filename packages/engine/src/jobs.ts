@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { categoryScores, classifyRepo, RULES_VERSION } from "./classify/rules.js";
 import type { KinlyConfig } from "./config.js";
@@ -348,6 +348,17 @@ export function classifyAll(ctx: JobContext, options: { onlyUnclassified?: boole
 }
 
 /**
+ * Drop weekly reports written before their week ended (H4), from the store and from the data repo's working copy.
+ * Leaving the file behind made the next export list it in the manifest after it was removed upstream, and an
+ * all-or-nothing import then refused the whole data repo. Returns the ids dropped.
+ */
+export function dropPartialWeeklyReports(ctx: JobContext): string[] {
+  const dropped = ctx.store.dropPartialWeeklies();
+  for (const id of dropped) rmSync(path.join(ctx.config.reportsDir, "weekly", `${id}.md`), { force: true });
+  return dropped;
+}
+
+/**
  * When the classifier's rules changed (RULES_VERSION), reclassify rule-sourced repos once (H13). The daily run only
  * classifies "other" repos, so without this a better rule never reaches a repo it already misfiled.
  *
@@ -623,7 +634,10 @@ export function importData(ctx: JobContext): { repos: number; snapshots: number;
   const merged = ctx.store.importAliases(aliases);
   const snaps = importSnapshots(ctx);
   const docs = importReportFiles(ctx);
-  const partial = ctx.store.dropPartialWeeklies();
+  const partial = dropPartialWeeklyReports(ctx);
+  // Imported categories may differ from the ones a heuristic line was written for.
+  const realigned = alignHeuristicUse(ctx);
+  if (realigned) ctx.log(`import: ${realigned} heuristic business lines realigned with their category`);
   if (merged) ctx.log(`import: ${merged} aliases applied`);
   if (partial.length) ctx.log(`import: dropped partial weekly ${partial.join(", ")}`);
   ctx.log(`import: ${repos} repos, ${snaps.files} snapshot files, ${docs.reports} reports, ${docs.resources} resource pages`);
@@ -636,10 +650,27 @@ export function importData(ctx: JobContext): { repos: number; snapshots: number;
  * after a retry, throws — a half-rebuilt store must never be exported over the public data repo. A data repo
  * with no manifest at all (a first deployment) returns `{ files: 0, empty: true }`.
  */
+/** The commit SHA a branch points at, or null when GitHub cannot say. */
+async function resolveCommit(ctx: JobContext, fetchImpl: typeof fetch, repo: string, branch: string): Promise<string | null> {
+  try {
+    const headers: Record<string, string> = { accept: "application/vnd.github.sha", "user-agent": "kinly" };
+    if (ctx.config.githubToken) headers["authorization"] = `Bearer ${ctx.config.githubToken}`;
+    const res = await fetchImpl(`https://api.github.com/repos/${repo}/commits/${encodeURIComponent(branch)}`, { headers });
+    const sha = res.ok ? (await res.text()).trim() : "";
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchDataFromRepo(ctx: JobContext, options: { fetchImpl?: typeof fetch } = {}): Promise<{ files: number; empty?: boolean }> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const { dataRepo, dataBranch } = ctx.config;
-  const base = `https://raw.githubusercontent.com/${dataRepo}/${dataBranch}`;
+  // Pin every file to the branch's current commit: one consistent snapshot, and no stale branch copy from the raw CDN
+  // (a cached manifest once listed a file already deleted upstream, and the all-or-nothing import refused). If the
+  // commit cannot be resolved, fall back to the branch name.
+  const ref = (await resolveCommit(ctx, fetchImpl, dataRepo, dataBranch)) ?? dataBranch;
+  const base = `https://raw.githubusercontent.com/${dataRepo}/${ref}`;
   const get = async (p: string): Promise<string | null> => {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {

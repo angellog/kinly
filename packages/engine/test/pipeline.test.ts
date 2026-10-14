@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -235,6 +235,41 @@ describe("rule changes reach already-filed repos (H13)", () => {
     assert.equal(after?.summary, "Keeps its summary.");
     assert.equal(after?.summary_at, "2026-10-01T00:00:00.000Z", "a realignment does not make the summary look new");
     assert.equal(jobs.alignHeuristicUse(ctx), 0, "idempotent");
+    store.close();
+  });
+});
+
+describe("partial weekly files (v0.2.2)", () => {
+  it("deletes the file as well as the row, so the next manifest cannot list it", () => {
+    const { ctx, store, config } = context(offlineGitHub);
+    const dir = path.join(config.reportsDir, "weekly");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "2026-W42.md"), "# W42 so far");
+    writeFileSync(path.join(dir, "2026-W41.md"), "# W41");
+    store.saveReport("weekly", "2026-W42", "# W42 so far", { generatedAt: "2026-10-12T00:12:43Z" });
+    store.saveReport("weekly", "2026-W41", "# W41", { generatedAt: "2026-10-12T06:40:00Z" });
+    assert.deepEqual(jobs.dropPartialWeeklyReports(ctx), ["2026-W42"]);
+    assert.equal(existsSync(path.join(dir, "2026-W42.md")), false);
+    assert.equal(existsSync(path.join(dir, "2026-W41.md")), true);
+    store.close();
+  });
+});
+
+describe("data repo snapshot pinning (v0.2.2)", () => {
+  it("fetches every file at the branch's current commit, not the cached branch path", async () => {
+    const sha = "a053f4e".padEnd(40, "0");
+    const requested: string[] = [];
+    const pinned = (async (input: string | URL | Request) => {
+      const url = String(input);
+      requested.push(url);
+      if (url === "https://api.github.com/repos/angellog/kinly-data/commits/main") return new Response(sha, { status: 200 });
+      if (url === `https://raw.githubusercontent.com/angellog/kinly-data/${sha}/data/manifest.json`) return new Response(JSON.stringify({ files: ["reports/daily/2026-10-07.md"] }), { status: 200 });
+      if (url === `https://raw.githubusercontent.com/angellog/kinly-data/${sha}/reports/daily/2026-10-07.md`) return new Response("# Kinly Daily\n", { status: 200 });
+      return new Response("404", { status: 404 });
+    }) as typeof fetch;
+    const { ctx, store } = context(pinned);
+    assert.equal((await jobs.fetchDataFromRepo(ctx, { fetchImpl: pinned })).files, 1);
+    assert.ok(requested.filter((u) => u.startsWith("https://raw.")).every((u) => u.includes(`/${sha}/`)), "every raw read is pinned");
     store.close();
   });
 });
