@@ -197,4 +197,44 @@ describe("rule changes reach already-filed repos (H13)", () => {
     assert.deepEqual(jobs.reclassifyOnRuleChange(ctx).changed, [], "runs once per rules version");
     store.close();
   });
+
+  it("never demotes a repo filed from its README when the store has no README (v0.2.1 regression)", () => {
+    const { ctx, store } = context(offlineGitHub);
+    // A published store has no README excerpts (R6): this repo was filed as an agent from its README on the Mac.
+    const bare = "0xSero/litter";
+    store.upsertRepoMeta({ ...meta(bare), description: null, topics: [] });
+    store.setCategory(bare, "ai-agents", "rule");
+    store.setSummary(bare, { summary: "x", business_use: "Candidate for the Paperclip agent operation or a client-facing agent pilot; test whether it shortens a workflow you already run.", source: "heuristic", hash: "" });
+    // A narrow edge (one text hit) is not enough to overturn a filing either.
+    const close = "someone/close-call";
+    store.upsertRepoMeta({ ...meta(close), description: "A dashboard for your terminal", topics: [] });
+    store.setCategory(close, "devtools", "rule");
+    // A model-written line is never rewritten, even when it no longer matches a template.
+    const llm = "someone/llm-written";
+    store.upsertRepoMeta({ ...meta(llm), description: "geospatial globe", topics: ["geospatial", "gis"] });
+    store.setCategory(llm, "security", "rule");
+    store.setSummary(llm, { summary: "y", business_use: "A specific sentence a model wrote.", source: "llm", hash: "" });
+
+    const out = jobs.reclassifyOnRuleChange(ctx);
+    assert.equal(store.getRepo(bare)?.category, "ai-agents", "no evidence is not evidence for 'other'");
+    assert.equal(store.getRepo(close)?.category, "devtools");
+    assert.deepEqual(out.changed, [llm]);
+    assert.equal(store.getRepo(llm)?.business_use, "A specific sentence a model wrote.");
+    store.close();
+  });
+
+  it("realigns a template line with a category set elsewhere (an import), keeping the summary", () => {
+    const { ctx, store } = context(offlineGitHub);
+    const r = "someone/imported";
+    store.upsertRepoMeta(meta(r));
+    store.setCategory(r, "content-media", "rule");
+    store.setSummary(r, { summary: "Keeps its summary.", business_use: "Security hygiene; relevant for the client-facing services and stored tokens.", source: "heuristic", hash: "h", at: "2026-10-01T00:00:00.000Z" });
+    assert.equal(jobs.alignHeuristicUse(ctx), 1);
+    const after = store.getRepo(r);
+    assert.match(after?.business_use ?? "", /carousel, reel, voice or video/);
+    assert.equal(after?.summary, "Keeps its summary.");
+    assert.equal(after?.summary_at, "2026-10-01T00:00:00.000Z", "a realignment does not make the summary look new");
+    assert.equal(jobs.alignHeuristicUse(ctx), 0, "idempotent");
+    store.close();
+  });
 });

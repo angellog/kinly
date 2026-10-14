@@ -3,6 +3,18 @@
 All notable changes to Project Kinly. Versions follow [semver](https://semver.org); the API's `/api/health` reports
 the deployed commit as `version` and the package release as `release`.
 
+## 0.2.2 — 2026-10-14
+
+### Fixed
+- **0.2.1's one-time reclassification moved 1,018 repositories, many of them wrongly.** A published store carries no
+  README excerpts (by design, R6), so the server classified each repo on less text than the run that first filed it, and
+  repos whose only signal was their README (for example `0xSero/litter`, an agent) fell to "other". The categories
+  were restored from `angellog/kinly-data` with the import job. Reclassification after a rules change is now
+  conservative: a repo moves only to a real category, never to "other", and only when the new category beats the current
+  one by a full topic's weight (`RECLASSIFY_MARGIN`). Each heuristic business line is then realigned with its repo's
+  category, rewriting only a line that is another category's template; summaries and model-written lines are never
+  touched. `RULES_VERSION` 3 runs this once. Tests pin the README-less case, the narrow-margin case and the LLM case.
+
 ## 0.2.1 — 2026-10-14
 
 Three bugs the Kinly agent found in its own first run (VAN-66), and the instructions that let it run at all.

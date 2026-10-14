@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { classifyRepo, RULES_VERSION } from "./classify/rules.js";
+import { categoryScores, classifyRepo, RULES_VERSION } from "./classify/rules.js";
 import type { KinlyConfig } from "./config.js";
 import { GitHubClient, GitHubHttpError, RateLimitExhausted } from "./github/client.js";
 import { fetchStarHistory, STAR_HISTORY_PAGE } from "./github/star-history.js";
 import { enrichRepos } from "./github/enrich.js";
 import { publishFiles, type PublishFile } from "./github/publish.js";
-import { heuristicSummary, Llm } from "./llm/anthropic.js";
+import { heuristicSummary, Llm, USE_TEMPLATES } from "./llm/anthropic.js";
 import { dailyReport, dailySelection } from "./reports/daily.js";
 import type { RunHealth } from "./reports/markdown.js";
 import { landscapeReport } from "./reports/landscape.js";
@@ -348,30 +348,55 @@ export function classifyAll(ctx: JobContext, options: { onlyUnclassified?: boole
 }
 
 /**
- * When the classifier's rules changed (RULES_VERSION), reclassify every rule-sourced repo once and rewrite the
- * heuristic summary of each repo whose category moved, since its business line is the category's template (H13).
- * Owner and LLM/curated categories are never touched. Returns the repos that moved.
+ * When the classifier's rules changed (RULES_VERSION), reclassify rule-sourced repos once (H13). The daily run only
+ * classifies "other" repos, so without this a better rule never reaches a repo it already misfiled.
+ *
+ * Conservative on purpose: a published store carries no README excerpts (R6), so the server classifies on less text
+ * than the run that first filed the repo. A repo therefore moves only to a real category, never to "other", and only
+ * when the new category beats the current one by a full topic's weight. Owner and LLM/curated categories are never
+ * touched. Afterwards every heuristic business line is realigned with its repo's category. Returns the repos moved.
  */
-export function reclassifyOnRuleChange(ctx: JobContext): { version: number; changed: string[] } {
-  if (ctx.store.getMeta("classify_rules_version") === String(RULES_VERSION)) return { version: RULES_VERSION, changed: [] };
+export const RECLASSIFY_MARGIN = 3;
+
+export function reclassifyOnRuleChange(ctx: JobContext): { version: number; changed: string[]; realigned: number } {
+  if (ctx.store.getMeta("classify_rules_version") === String(RULES_VERSION)) return { version: RULES_VERSION, changed: [], realigned: 0 };
   const changed: string[] = [];
+  let realigned = 0;
   ctx.store.transaction(() => {
     for (const name of ctx.store.allRepoNames()) {
       const repo = ctx.store.getRepo(name);
       if (!repo || repo.category_source === "owner" || repo.category_source === "llm") continue;
       const c = classifyRepo(repo);
-      if (c.category === repo.category) continue;
+      if (c.category === repo.category || c.category === "other") continue;
+      const current = categoryScores(repo).get(repo.category) ?? 0;
+      if (c.score < current + RECLASSIFY_MARGIN) continue;
       ctx.store.setCategory(name, c.category, "rule");
       changed.push(name);
-      if (repo.summary_source === "heuristic") {
-        const h = heuristicSummary({ ...repo, category: c.category });
-        ctx.store.setSummary(name, { summary: h.summary, business_use: h.business_use, source: "heuristic", hash: h.hash });
-      }
     }
+    realigned = alignHeuristicUse(ctx);
     ctx.store.setMeta("classify_rules_version", String(RULES_VERSION));
   });
-  if (changed.length) ctx.log(`classify: rules v${RULES_VERSION} moved ${changed.length} repos (${changed.slice(0, 5).join(", ")}${changed.length > 5 ? ", …" : ""})`);
-  return { version: RULES_VERSION, changed };
+  if (changed.length || realigned) ctx.log(`classify: rules v${RULES_VERSION} moved ${changed.length} repos (${changed.slice(0, 5).join(", ")}${changed.length > 5 ? ", …" : ""}); ${realigned} heuristic business lines realigned`);
+  return { version: RULES_VERSION, changed, realigned };
+}
+
+/**
+ * A heuristic business line is its category's template. When a repo's category changes after its heuristic summary
+ * was written, the line still names the old category (gods-eye-view read "Security hygiene…"). Rewrite only a line
+ * that is some other category's template; a model-written line or the summary itself is never touched.
+ */
+export function alignHeuristicUse(ctx: JobContext): number {
+  const templates = new Set(Object.values(USE_TEMPLATES));
+  let n = 0;
+  for (const name of ctx.store.allRepoNames()) {
+    const repo = ctx.store.getRepo(name);
+    if (!repo || repo.summary_source !== "heuristic" || !repo.summary || !repo.business_use) continue;
+    const want = USE_TEMPLATES[repo.category];
+    if (repo.business_use === want || !templates.has(repo.business_use)) continue;
+    ctx.store.setSummary(name, { summary: repo.summary, business_use: want, source: "heuristic", hash: repo.summary_hash ?? "", at: repo.summary_at });
+    n++;
+  }
+  return n;
 }
 
 export async function summarizePending(ctx: JobContext, profile: Profile, options: { limit?: number; since?: string; heuristicOnly?: boolean } = {}): Promise<Record<string, unknown>> {

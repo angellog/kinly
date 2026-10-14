@@ -40,7 +40,7 @@ export const CATEGORY_LABELS: Record<CategoryId, string> = {
  * reach a repo it already misfiled; a new version makes the next run (and the next boot) reclassify every rule-sourced
  * repo once and refresh the heuristic text that hangs off the category (H13).
  */
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 export const RULES: CategoryRule[] = [
   {
@@ -139,7 +139,18 @@ export interface Classification {
   runner_up_score: number;
 }
 
-export function classifyRepo(repo: Pick<RepoRecord, "full_name" | "description" | "topics" | "readme_excerpt" | "language">): Classification {
+type ClassifyInput = Pick<RepoRecord, "full_name" | "description" | "topics" | "readme_excerpt" | "language">;
+
+export function classifyRepo(repo: ClassifyInput): Classification {
+  const ranked = [...categoryScores(repo).entries()].sort((a, b) => b[1] - a[1]);
+  const top = ranked[0];
+  const second = ranked[1];
+  if (!top || top[1] < 2) return { category: "other", score: top?.[1] ?? 0, runner_up: null, runner_up_score: 0 };
+  return { category: top[0], score: top[1], runner_up: second?.[0] ?? null, runner_up_score: second?.[1] ?? 0 };
+}
+
+/** Every category's rule score for a repo (the raw material classifyRepo ranks). */
+export function categoryScores(repo: ClassifyInput): Map<CategoryId, number> {
   const topics = new Set(repo.topics.map((t) => t.toLowerCase()));
   const text = [repo.full_name.replace(/[-_/]/g, " "), repo.description ?? "", (repo.readme_excerpt ?? "").slice(0, 1200)].join("\n");
   const scores = new Map<CategoryId, number>();
@@ -158,9 +169,5 @@ export function classifyRepo(repo: Pick<RepoRecord, "full_name" | "description" 
   const lang = (repo.language ?? "").toLowerCase();
   if (["rust", "c", "c++", "zig", "go", "assembly"].includes(lang)) scores.set("systems-languages", (scores.get("systems-languages") ?? 0) + 0.5);
   if (["swift", "kotlin", "dart", "objective-c"].includes(lang)) scores.set("web-mobile", (scores.get("web-mobile") ?? 0) + 1);
-  const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1]);
-  const top = ranked[0];
-  const second = ranked[1];
-  if (!top || top[1] < 2) return { category: "other", score: top?.[1] ?? 0, runner_up: null, runner_up_score: 0 };
-  return { category: top[0], score: top[1], runner_up: second?.[0] ?? null, runner_up_score: second?.[1] ?? 0 };
+  return scores;
 }

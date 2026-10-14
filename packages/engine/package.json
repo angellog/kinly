@@ -1,6 +1,6 @@
 {
   "name": "@kinly/engine",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Project Kinly engine: collect GitHub trending data, enrich, classify, score, and write reports.",
   "license": "MIT",
   "author": "Vantik Systems",

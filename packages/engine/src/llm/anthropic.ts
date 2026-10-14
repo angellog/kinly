@@ -173,6 +173,26 @@ export class Llm {
 }
 
 /** Keyless summary: the description, else the README's first sentence; business use from a category template. */
+/** The heuristic business line for each category (used when no model has read the repo). */
+export const USE_TEMPLATES: Record<CategoryId, string> = {
+  "ai-agents": "Candidate for the Paperclip agent operation or a client-facing agent pilot; test whether it shortens a workflow you already run.",
+  "mcp-tools": "Could plug straight into Claude Code or the Paperclip agents as a tool or skill; check what it gives an agent that it did not have.",
+  "llm-infra": "Infrastructure for the agents and pipelines; relevant if it lowers cost, latency or lock-in for something already running.",
+  "design-ui": "Could raise the visual bar of carousels, capture pages or the Paperclip plugin UI; test it on one real slide or page.",
+  "content-media": "Candidate for the carousel, reel, voice or video pipeline; test it on one real asset.",
+  "automation-workflow": "Could replace a manual step in the content or posting pipeline, or a scraping job; measure the minutes saved.",
+  "social-marketing": "Touches Instagram, WhatsApp, Telegram or growth directly; relevant to both Vantik Systems and FeetBit.",
+  "business-ops": "Back-office candidate (CRM, email, invoicing, knowledge); worth it only if it replaces a paid tool or a spreadsheet.",
+  "data-analytics": "Useful for the KPI dashboard or content analytics; test it on the engagement ledger.",
+  devtools: "Developer-experience gain; relevant if it speeds up the daily build loop.",
+  "infra-devops": "Hosting and operations; relevant if it simplifies the Railway or self-hosted footprint.",
+  security: "Security hygiene; relevant for the client-facing services and stored tokens.",
+  "learning-reference": "Reference material; mine it for carousel topics and client talking points rather than installing anything.",
+  "web-mobile": "Framework or app layer; relevant for the capture page, Carousel Maker or a client prototype.",
+  "systems-languages": "Low-level tooling; probably not a direct business fit, but may be a performance win for a pipeline step.",
+  other: "No obvious fit yet; read the README before spending time on it.",
+};
+
 export function heuristicSummary(repo: RepoRecord): { summary: string; business_use: string; hash: string } {
   // README fallback as plain text: drop badges, images, links' targets, headings and code markers.
   const readmePlain = (repo.readme_excerpt ?? "")
@@ -182,23 +202,5 @@ export function heuristicSummary(repo: RepoRecord): { summary: string; business_
     .replace(/[#>*_`|]/g, " ");
   const readmeFirst = squash(readmePlain.split(/(?<=[.!?])\s+/)[0] ?? "");
   const summary = squash(repo.description ?? "") || truncate(readmeFirst, 200) || `${repo.full_name} (no description yet).`;
-  const templates: Record<CategoryId, string> = {
-    "ai-agents": "Candidate for the Paperclip agent operation or a client-facing agent pilot; test whether it shortens a workflow you already run.",
-    "mcp-tools": "Could plug straight into Claude Code or the Paperclip agents as a tool or skill; check what it gives an agent that it did not have.",
-    "llm-infra": "Infrastructure for the agents and pipelines; relevant if it lowers cost, latency or lock-in for something already running.",
-    "design-ui": "Could raise the visual bar of carousels, capture pages or the Paperclip plugin UI; test it on one real slide or page.",
-    "content-media": "Candidate for the carousel, reel, voice or video pipeline; test it on one real asset.",
-    "automation-workflow": "Could replace a manual step in the content or posting pipeline, or a scraping job; measure the minutes saved.",
-    "social-marketing": "Touches Instagram, WhatsApp, Telegram or growth directly; relevant to both Vantik Systems and FeetBit.",
-    "business-ops": "Back-office candidate (CRM, email, invoicing, knowledge); worth it only if it replaces a paid tool or a spreadsheet.",
-    "data-analytics": "Useful for the KPI dashboard or content analytics; test it on the engagement ledger.",
-    devtools: "Developer-experience gain; relevant if it speeds up the daily build loop.",
-    "infra-devops": "Hosting and operations; relevant if it simplifies the Railway or self-hosted footprint.",
-    security: "Security hygiene; relevant for the client-facing services and stored tokens.",
-    "learning-reference": "Reference material; mine it for carousel topics and client talking points rather than installing anything.",
-    "web-mobile": "Framework or app layer; relevant for the capture page, Carousel Maker or a client prototype.",
-    "systems-languages": "Low-level tooling; probably not a direct business fit, but may be a performance win for a pipeline step.",
-    other: "No obvious fit yet; read the README before spending time on it.",
-  };
-  return { summary, business_use: templates[repo.category], hash: repo.readme_hash ?? sha256(summary) };
+  return { summary, business_use: USE_TEMPLATES[repo.category], hash: repo.readme_hash ?? sha256(summary) };
 }
