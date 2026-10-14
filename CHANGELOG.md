@@ -3,6 +3,14 @@
 All notable changes to Project Kinly. Versions follow [semver](https://semver.org); the API's `/api/health` reports
 the deployed commit as `version` and the package release as `release`.
 
+## 0.2.3 — 2026-10-14
+
+### Fixed
+- **An import undid reclassification.** Importing from `kinly-data` writes the published category over the server's
+  own, and the once-per-rules-version marker then kept the conservative pass from running again, so 0.2.2's 21 moves
+  (including `gods-eye-view`) were reverted by the next import. Every import now re-judges imported rule categories
+  under the current rules with the same conservative pass. Owner and LLM/curated categories are still never touched.
+
 ## 0.2.2 — 2026-10-14
 
 ### Fixed

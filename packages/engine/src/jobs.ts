@@ -635,9 +635,11 @@ export function importData(ctx: JobContext): { repos: number; snapshots: number;
   const snaps = importSnapshots(ctx);
   const docs = importReportFiles(ctx);
   const partial = dropPartialWeeklyReports(ctx);
-  // Imported categories may differ from the ones a heuristic line was written for.
-  const realigned = alignHeuristicUse(ctx);
-  if (realigned) ctx.log(`import: ${realigned} heuristic business lines realigned with their category`);
+  // Imported rule categories were judged by whatever rules the exporter ran, and they overwrite ours. Re-judge them under
+  // these rules with the same conservative pass a rules change gets (it also realigns heuristic business lines).
+  ctx.store.setMeta("classify_rules_version", "imported");
+  const rejudged = reclassifyOnRuleChange(ctx);
+  if (rejudged.changed.length || rejudged.realigned) ctx.log(`import: re-judged categories, ${rejudged.changed.length} moved, ${rejudged.realigned} business lines realigned`);
   if (merged) ctx.log(`import: ${merged} aliases applied`);
   if (partial.length) ctx.log(`import: dropped partial weekly ${partial.join(", ")}`);
   ctx.log(`import: ${repos} repos, ${snaps.files} snapshot files, ${docs.reports} reports, ${docs.resources} resource pages`);

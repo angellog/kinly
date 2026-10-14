@@ -1,6 +1,6 @@
 {
   "name": "@kinly/paperclip-plugin",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "type": "module",
   "description": "Paperclip plugin vantik.kinly: the Kinly console, agent tools, managed Kinly agent and skill, and a daily brief job.",

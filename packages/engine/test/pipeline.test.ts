@@ -273,3 +273,24 @@ describe("data repo snapshot pinning (v0.2.2)", () => {
     store.close();
   });
 });
+
+describe("imports re-judge rule categories (v0.2.3)", () => {
+  it("an imported rule category is re-judged under the current rules, conservatively", () => {
+    const { ctx, store, config } = context(offlineGitHub);
+    const globe = "bilawalsidhu/gods-eye-view";
+    store.upsertRepoMeta({ ...meta(globe), description: "Live open source spatial intelligence on a photorealistic 3D globe.", topics: ["osint", "geospatial", "gis", "3d-globe", "cesium"] });
+    store.setCategory(globe, "data-analytics", "rule");
+    store.setMeta("classify_rules_version", "3");
+    // The published data still files it under the old rules.
+    const reposDir = path.join(config.dataDir, "repos");
+    mkdirSync(reposDir, { recursive: true });
+    const published = { ...store.getRepo(globe), category: "security", category_source: "rule" };
+    writeFileSync(path.join(reposDir, "b.json"), `[\n${JSON.stringify(published)}\n]\n`);
+    const logs: string[] = [];
+    const watched = { ...ctx, log: (m: string) => logs.push(m) };
+    assert.equal(jobs.importData(watched).repos, 1, "the published record was imported");
+    assert.ok(logs.some((l) => /re-judged categories, 1 moved/.test(l)), `the import overwrote it and the re-judge moved it back: ${logs.join(" | ")}`);
+    assert.equal(store.getRepo(globe)?.category, "data-analytics", "the current rules win back the filing after an import");
+    store.close();
+  });
+});
