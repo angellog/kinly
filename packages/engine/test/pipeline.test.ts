@@ -7,7 +7,7 @@ import { loadConfig } from "../src/config.js";
 import { GitHubClient } from "../src/github/client.js";
 import * as jobs from "../src/jobs.js";
 import { Store } from "../src/store/store.js";
-import { fixture } from "./helpers.js";
+import { fixture, meta } from "./helpers.js";
 
 const dirs: string[] = [];
 after(() => {
@@ -175,5 +175,26 @@ describe("review G1 hardening (engine)", () => {
   it("Monday's weekly covers the week that just ended", () => {
     assert.equal(jobs.completedWeekEnd("2026-10-12"), "2026-10-11");
     assert.equal(jobs.completedWeekEnd("2026-10-14"), "2026-10-11");
+  });
+});
+
+describe("rule changes reach already-filed repos (H13)", () => {
+  it("reclassifies rule-sourced repos once, refreshes heuristic text, and leaves owner categories alone", async () => {
+    const { ctx, store } = context(offlineGitHub);
+    const globe = "bilawalsidhu/gods-eye-view";
+    store.upsertRepoMeta({ ...meta(globe), description: "A spy satellite simulator in your browser. Live open source spatial intelligence on a photorealistic 3D globe.", topics: ["osint", "geospatial", "gis", "3d-globe", "cesium"] });
+    store.setCategory(globe, "security", "rule");
+    store.setSummary(globe, { summary: "A globe.", business_use: "Security hygiene; relevant for the client-facing services and stored tokens.", source: "heuristic", hash: "" });
+    const mine = "someone/owner-filed";
+    store.upsertRepoMeta({ ...meta(mine), description: "A satellite imagery viewer", topics: ["gis"] });
+    store.setCategory(mine, "security", "owner");
+
+    const first = jobs.reclassifyOnRuleChange(ctx);
+    assert.deepEqual(first.changed, [globe]);
+    assert.equal(store.getRepo(globe)?.category, "data-analytics");
+    assert.doesNotMatch(store.getRepo(globe)?.business_use ?? "", /Security hygiene/, "the category template moved with the category");
+    assert.equal(store.getRepo(mine)?.category, "security", "an owner's category is never overridden");
+    assert.deepEqual(jobs.reclassifyOnRuleChange(ctx).changed, [], "runs once per rules version");
+    store.close();
   });
 });

@@ -18,6 +18,8 @@ export interface KinlyApiOptions {
   token?: string | null;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /** Pause before the one retry of a failed read (default 1.5 s). */
+  retryDelayMs?: number;
 }
 
 type Query = Record<string, string | number | boolean | undefined | null>;
@@ -27,12 +29,14 @@ export class KinlyApi {
   private readonly token: string | null;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly retryDelayMs: number;
 
   constructor(options: KinlyApiOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.token = options.token ?? null;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 30_000;
+    this.retryDelayMs = options.retryDelayMs ?? 1_500;
   }
 
   get canWrite(): boolean {
@@ -42,21 +46,32 @@ export class KinlyApi {
   private async call<T>(method: "GET" | "POST", path: string, query: Query = {}, body?: unknown, timeoutMs = this.timeoutMs): Promise<T> {
     const url = new URL(`${this.baseUrl}${path}`);
     for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
-    const headers: Record<string, string> = { accept: "application/json", "user-agent": "vantik.kinly-paperclip/0.1" };
+    const headers: Record<string, string> = { accept: "application/json", "user-agent": "vantik.kinly-paperclip/0.2" };
     if (method === "POST") {
       if (!this.token) throw new KinlyApiError(401, "No Kinly API token is configured for this company (plugin settings → Kinly API token).");
       headers["authorization"] = `Bearer ${this.token}`;
       headers["content-type"] = "application/json";
     }
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), timeoutMs);
-    let res: Response;
-    try {
-      res = await this.fetchImpl(url, { method, headers, signal: ac.signal, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
-    } catch (err) {
-      throw new KinlyApiError(0, `Kinly API unreachable at ${this.baseUrl}: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      clearTimeout(timer);
+    // A read that fails before any response (a cold start, a dropped connection) is retried once after a short
+    // pause; a single failure is not evidence the service is down (H15). Writes and timeouts are never retried:
+    // a lost response to a POST may mean it was applied.
+    let res: Response | null = null;
+    for (let attempt = 1; res === null; attempt++) {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), timeoutMs);
+      try {
+        res = await this.fetchImpl(url, { method, headers, signal: ac.signal, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+      } catch (err) {
+        const timedOut = ac.signal.aborted;
+        if (method === "GET" && !timedOut && attempt < 2) {
+          await new Promise((r) => setTimeout(r, this.retryDelayMs));
+          continue;
+        }
+        const tries = attempt > 1 ? ` after ${attempt} attempts` : "";
+        throw new KinlyApiError(0, `Kinly API unreachable at ${this.baseUrl}${tries}: ${timedOut ? `no answer within ${timeoutMs / 1000} s` : err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        clearTimeout(timer);
+      }
     }
     const text = await res.text();
     let json: unknown = null;

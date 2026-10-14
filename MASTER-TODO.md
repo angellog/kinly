@@ -89,10 +89,10 @@ Loop rule unchanged: ticked only when done **and** verified. **(Angelo)** items 
 - [x] H12 **(Angelo)** Sign the Mac's Claude Code back in — done 2026-10-14 ~08:29 UTC; Kinly's VAN-66 run completed without an auth error. *Avast, Beacon and Splice are still in `error` from the old failure: resume them in Paperclip where they should work*
 - [ ] H11 **(Angelo)** Rate GST-29 (`0xNyk/council-of-high-intelligence`) — evidence: an owner rating exists and the repo is `rated`
 
-### Found by Kinly in VAN-66 (not yet fixed)
-- [ ] H13 `bilawalsidhu/gods-eye-view` (a geospatial viewer) is filed as `security` with that category's boilerplate business line — the category rule matches too loosely; fix the rule and add a regression case
-- [ ] H14 `debpalash/VoiceStudio`'s business-use text is cut mid-word ("…as a client service wou"), dropping the AGPL clause — the length cap must cut at a sentence or word boundary, never mid-word
-- [ ] H15 The plugin client reports "Kinly API unreachable … fetch failed" on a single cold-start failure — retry once with a short backoff before reporting the service unreachable
+### Found by Kinly in VAN-66 (fixed in v0.2.1)
+- [x] H13 `bilawalsidhu/gods-eye-view` (a geospatial viewer) is filed as `security` with that category's boilerplate business line — the category rule matches too loosely; fix the rule and add a regression case
+- [x] H14 `debpalash/VoiceStudio`'s business-use text is cut mid-word ("…as a client service wou"), dropping the AGPL clause — the length cap must cut at a sentence or word boundary, never mid-word
+- [x] H15 The plugin client reports "Kinly API unreachable … fetch failed" on a single cold-start failure — retry once with a short backoff before reporting the service unreachable
 
 ## Hand-off list (Angelo)
 - ~~**(Angelo) — blocks every Paperclip agent on this Mac, not just Kinly:** the Mac's Claude Code login has expired~~ **Done 2026-10-14** (Avast, Beacon and Splice still need resuming) ("OAuth session expired and could not be refreshed"; Avast, Beacon, Splice and Kinly are in `error`). In a terminal run `claude`, then `/login`. Then open each agent in `error` and resume it, and re-run VAN-66 (Kinly's read-only tool check). (H12)

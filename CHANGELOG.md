@@ -3,9 +3,21 @@
 All notable changes to Project Kinly. Versions follow [semver](https://semver.org); the API's `/api/health` reports
 the deployed commit as `version` and the package release as `release`.
 
-## Unreleased
+## 0.2.1 — 2026-10-14
+
+Three bugs the Kinly agent found in its own first run (VAN-66), and the instructions that let it run at all.
 
 ### Fixed
+- **Misfiled repositories stay misfiled (H13).** `bilawalsidhu/gods-eye-view`, a geospatial globe tagged `osint`,
+  was filed under Security with that category's boilerplate business line. Geospatial and mapping signals now count
+  towards Data & analytics. The daily run only reclassifies repos still in "other", so a better rule never reached a
+  repo it had already misfiled: `RULES_VERSION` now makes the next boot (and daily) reclassify every rule-sourced repo
+  once and rewrite the heuristic text of each repo that moved. Owner and LLM/curated categories are never touched.
+- **Text cut mid-word (H14).** Tool output clipped business lines at 300 characters mid-word, which dropped the AGPL
+  clause from `debpalash/VoiceStudio`. Clipping now ends on a whole sentence (or a whole word, marked "…"), the business
+  line gets 500 characters, and the ingest sanitiser cuts on a word boundary too.
+- **A cold start read as an outage (H15).** One failed request made the plugin report "Kinly API unreachable". Reads are
+  retried once after 1.5 s; writes and timeouts never are (a lost reply to a write may mean it was applied).
 - The Kinly agent could not find its tools. In a `claude_local` (ACP) run, Paperclip delivers only connected-app MCP
   tools to the session; plugin tools are reached over `POST /api/plugins/tools/execute` with the run's own agent key.
   `AGENTS.md` and the `kinly` skill now say so and carry a `kinly <tool> '<json>'` helper built only from the

@@ -18,7 +18,7 @@ import { TOOL_DECLARATIONS } from "./tools.js";
 const manifest: PaperclipPluginManifestV1 = {
   id: "vantik.kinly",
   apiVersion: 1,
-  version: "0.2.0",
+  version: "0.2.1",
   displayName: "Kinly — GitHub trends",
   description:
     "Project Kinly by Vantik Systems. Covers what is trending on GitHub today, this week and over the last 18 months, what each repository does, and whether it is worth testing for Vantik Systems or FeetBit. Includes a console, agent tools, a managed Kinly researcher, a skill, and an optional daily brief.",

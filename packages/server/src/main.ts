@@ -95,6 +95,15 @@ async function main(): Promise<void> {
         await new Promise((r) => setTimeout(r, wait));
       }
     }
+    // Changed classifier rules reach already-filed repos once, at boot, rather than waiting for the next daily (H13).
+    try {
+      await lock("reclassify", async () => {
+        const moved = jobs.reclassifyOnRuleChange(ctx).changed;
+        if (moved.length) jobs.scoreAll(ctx, jobs.loadProfile(ctx));
+      });
+    } catch (err) {
+      log(`reclassify at boot failed (${err instanceof Error ? err.message : String(err)}); the daily run retries it`);
+    }
     ready = true;
     if (!schedulerOff) scheduler.start();
     else log("scheduler off (KINLY_SCHEDULER=off)");

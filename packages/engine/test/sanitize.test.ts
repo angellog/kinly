@@ -15,6 +15,10 @@ describe("untrusted text (D15)", () => {
     assert.ok(!/onerror|<script/i.test(t));
     assert.ok(!/[‮\u0007]/.test(t));
     assert.equal(cleanText("a".repeat(900), 100)?.length, 100);
+    // H14: a long sentence is cut at a word, never mid-word.
+    const cut = cleanText("offering it as a client service would require publishing changes ".repeat(4), 60) ?? "";
+    assert.ok(cut.length <= 60 && cut.endsWith("…"), cut);
+    assert.match(cut, /\b(a|as|it|client|service|would|offering|require|publishing|changes)…$/, `cut mid-word: ${cut}`);
     assert.equal(cleanText("   ", 10), null);
     assert.equal(cleanText("line one\n\n\n\nline two", 100, { multiline: true }), "line one\n\nline two");
   });

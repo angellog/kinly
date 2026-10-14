@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import { BRIEF_ORIGIN_KIND, buildBrief, testIssue, upsertBrief, type BriefIssueLike, type BriefIssues } from "../src/brief.js";
 import { KinlyApi } from "../src/client.js";
 import { DEFAULT_API_URL, normalizeApiUrl, parseConfig, tokenAllowedFor } from "../src/config.js";
-import { fence } from "../src/format.js";
+import { clip, fence } from "../src/format.js";
 import { AGENTS_MD, SKILL_MD } from "../src/generated/instructions.js";
 import { instructionsStale } from "../src/managed.js";
 import { runTool, TOOL_DECLARATIONS } from "../src/tools.js";
@@ -253,5 +253,55 @@ describe("managed agent instructions", () => {
     assert.equal(instructionsStale(null, AGENTS_MD), false);
     assert.equal(instructionsStale({ metadata: null }, AGENTS_MD), false);
     assert.equal(instructionsStale(withText(undefined), AGENTS_MD), false);
+  });
+});
+
+describe("clipping text for agents (H14)", () => {
+  const use = "A possible local replacement for Fish Audio in the reel pipeline, removing per-call cost. AGPL-3.0: fine internally, but offering it as a client service would require publishing changes.";
+  it("never cuts a word in half", () => {
+    for (const max of [40, 60, 97, 120, 150]) {
+      const c = clip(use, max);
+      assert.ok(c.length <= max, `${max}: ${c.length}`);
+      const body = c.replace(/…$/, "");
+      assert.ok(use.startsWith(body), `${max}: not a prefix`);
+      assert.ok(use.length === body.length || /[\s.]/.test(use[body.length] ?? " "), `${max}: cut mid-word → ${c}`);
+    }
+  });
+  it("prefers a whole sentence and leaves short text alone", () => {
+    assert.equal(clip(use, 120), "A possible local replacement for Fish Audio in the reel pipeline, removing per-call cost.");
+    assert.equal(clip("short", 10), "short");
+  });
+  it("fence keeps the licence clause of a normal business line", () => {
+    assert.match(fence(use, 500), /publishing changes\. >>>$/);
+  });
+});
+
+describe("cold starts (H15)", () => {
+  const flaky = (failures: number) => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      if (calls <= failures) throw new TypeError("fetch failed");
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    return { fetchImpl, count: () => calls };
+  };
+  it("retries a read once after a network failure", async () => {
+    const f = flaky(1);
+    const api = new KinlyApi({ baseUrl: "https://kinly.test", fetchImpl: f.fetchImpl, retryDelayMs: 0 });
+    await api.health();
+    assert.equal(f.count(), 2);
+  });
+  it("reports unreachable after the second failure, saying how many attempts", async () => {
+    const f = flaky(5);
+    const api = new KinlyApi({ baseUrl: "https://kinly.test", fetchImpl: f.fetchImpl, retryDelayMs: 0 });
+    await assert.rejects(api.health(), /unreachable at https:\/\/kinly\.test after 2 attempts: fetch failed/);
+    assert.equal(f.count(), 2);
+  });
+  it("never retries a write", async () => {
+    const f = flaky(1);
+    const api = new KinlyApi({ baseUrl: "https://kinly.test", token: "t".repeat(40), fetchImpl: f.fetchImpl, retryDelayMs: 0 });
+    await assert.rejects(api.setShortlist("a/b", "shortlisted"), /unreachable/);
+    assert.equal(f.count(), 1);
   });
 });

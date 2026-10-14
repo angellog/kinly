@@ -7,8 +7,21 @@ import type { RepoView } from "./client.js";
  * the fence early.
  */
 export function fence(text: string | null | undefined, max = 600): string {
-  const t = (text ?? "").replace(/<<<|>>>/g, "‹‹‹").replace(/\s+/g, " ").trim().slice(0, max);
+  const t = clip((text ?? "").replace(/<<<|>>>/g, "‹‹‹").replace(/\s+/g, " ").trim(), max);
   return t ? `<<< ${t} >>>` : "—";
+}
+
+/**
+ * Shorten text to at most `max` characters without cutting a word (H14). Prefers the end of the last whole
+ * sentence when that keeps at least half the budget; otherwise the last whole word, marked with "…".
+ */
+export function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const room = text.slice(0, max);
+  const sentence = Math.max(room.lastIndexOf(". "), room.lastIndexOf("! "), room.lastIndexOf("? "), room.endsWith(".") && /\s/.test(text[max] ?? "") ? max - 1 : -1);
+  if (sentence >= max / 2) return room.slice(0, sentence + 1);
+  const space = room.slice(0, max - 1).lastIndexOf(" ");
+  return `${(space > 0 ? room.slice(0, space) : room.slice(0, max - 1)).replace(/[\s,;:—-]+$/, "")}…`;
 }
 
 const LICENCE: Record<string, string> = {
@@ -27,7 +40,7 @@ export function licenceText(v: RepoView): string {
 export function repoLine(v: RepoView, i?: number): string {
   const head = `${i !== undefined ? `${i}. ` : ""}${v.repo.full_name} · ${v.repo.category} · ${v.score.verdict} ${v.score.total}/100 · relevance ${v.relevance}${v.metric_label ? ` · ${v.metric_label}` : ""}${v.repo.stars !== null ? ` · ★${v.repo.stars.toLocaleString("en-US")}` : ""}`;
   const owner = [v.starred ? "starred" : "", v.shortlist ? `shortlist: ${v.shortlist.status}` : "", v.rating ? `owner rated ${v.rating.rating}/5` : ""].filter(Boolean).join(", ");
-  return `${head}${owner ? ` · ${owner}` : ""}\n   what (derived from repo text): ${fence(v.repo.summary ?? v.repo.description, 300)}\n   use (model-written from repo text): ${fence(v.repo.business_use, 300)}\n   licence: ${licenceText(v)}`;
+  return `${head}${owner ? ` · ${owner}` : ""}\n   what (derived from repo text): ${fence(v.repo.summary ?? v.repo.description, 300)}\n   use (model-written from repo text): ${fence(v.repo.business_use, 500)}\n   licence: ${licenceText(v)}`;
 }
 
 export function repoCard(v: RepoView & { star_weeks?: Array<{ week_start: string; total: number }> }): string {

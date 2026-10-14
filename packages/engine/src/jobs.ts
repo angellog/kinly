@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { classifyRepo } from "./classify/rules.js";
+import { classifyRepo, RULES_VERSION } from "./classify/rules.js";
 import type { KinlyConfig } from "./config.js";
 import { GitHubClient, GitHubHttpError, RateLimitExhausted } from "./github/client.js";
 import { fetchStarHistory, STAR_HISTORY_PAGE } from "./github/star-history.js";
@@ -345,6 +345,33 @@ export function classifyAll(ctx: JobContext, options: { onlyUnclassified?: boole
     }
   });
   return { classified: n };
+}
+
+/**
+ * When the classifier's rules changed (RULES_VERSION), reclassify every rule-sourced repo once and rewrite the
+ * heuristic summary of each repo whose category moved, since its business line is the category's template (H13).
+ * Owner and LLM/curated categories are never touched. Returns the repos that moved.
+ */
+export function reclassifyOnRuleChange(ctx: JobContext): { version: number; changed: string[] } {
+  if (ctx.store.getMeta("classify_rules_version") === String(RULES_VERSION)) return { version: RULES_VERSION, changed: [] };
+  const changed: string[] = [];
+  ctx.store.transaction(() => {
+    for (const name of ctx.store.allRepoNames()) {
+      const repo = ctx.store.getRepo(name);
+      if (!repo || repo.category_source === "owner" || repo.category_source === "llm") continue;
+      const c = classifyRepo(repo);
+      if (c.category === repo.category) continue;
+      ctx.store.setCategory(name, c.category, "rule");
+      changed.push(name);
+      if (repo.summary_source === "heuristic") {
+        const h = heuristicSummary({ ...repo, category: c.category });
+        ctx.store.setSummary(name, { summary: h.summary, business_use: h.business_use, source: "heuristic", hash: h.hash });
+      }
+    }
+    ctx.store.setMeta("classify_rules_version", String(RULES_VERSION));
+  });
+  if (changed.length) ctx.log(`classify: rules v${RULES_VERSION} moved ${changed.length} repos (${changed.slice(0, 5).join(", ")}${changed.length > 5 ? ", …" : ""})`);
+  return { version: RULES_VERSION, changed };
 }
 
 export async function summarizePending(ctx: JobContext, profile: Profile, options: { limit?: number; since?: string; heuristicOnly?: boolean } = {}): Promise<Record<string, unknown>> {
@@ -742,7 +769,7 @@ export async function runDaily(ctx: JobContext, options: { date?: string; publis
   const listed = [...ctx.store.list("today", { date, limit: 150 }), ...ctx.store.list("week", { date, limit: 100 })].map((r) => r.full_name);
   out["starHistory"] = await fetchStarHistories(ctx, listed, { weeks: 2 });
   const profile = loadProfile(ctx);
-  out["classify"] = await recorded(ctx, "classify", async () => classifyAll(ctx, { onlyUnclassified: true }));
+  out["classify"] = await recorded(ctx, "classify", async () => ({ ...classifyAll(ctx, { onlyUnclassified: true }), rules: reclassifyOnRuleChange(ctx).changed.length }));
   out["summarize"] = await summarizePending(ctx, profile, { since: addDays(date, -14) });
   out["score"] = await recorded(ctx, "score", async () => scoreAll(ctx, profile));
   out["daily"] = await recorded(ctx, "report-daily", async () => writeDaily(ctx, profile, date, sources, credentials));

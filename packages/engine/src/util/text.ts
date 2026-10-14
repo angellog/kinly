@@ -91,7 +91,11 @@ export function cleanText(text: string | null | undefined, max: number, options:
   t = t.replace(CONTROL_RE, "");
   t = options.multiline ? t.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim() : squash(t);
   if (t.length === 0) return null;
-  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t;
+  if (t.length <= max) return t;
+  // Cut on a word boundary when one is reasonably close, never mid-word (H14).
+  const cut = t.slice(0, max - 1);
+  const space = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("\n"));
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
 /** An http(s) URL or null; anything else (javascript:, data:, relative) is dropped. */

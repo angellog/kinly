@@ -35,6 +35,13 @@ export const CATEGORY_LABELS: Record<CategoryId, string> = {
   other: "Other",
 };
 
+/**
+ * Bump whenever RULES or STRONG change. The daily run reclassifies only "other" repos, so a changed rule would never
+ * reach a repo it already misfiled; a new version makes the next run (and the next boot) reclassify every rule-sourced
+ * repo once and refresh the heuristic text that hangs off the category (H13).
+ */
+export const RULES_VERSION = 2;
+
 export const RULES: CategoryRule[] = [
   {
     category: "mcp-tools",
@@ -79,8 +86,10 @@ export const RULES: CategoryRule[] = [
   },
   {
     category: "data-analytics",
-    topics: ["data", "analytics", "database", "sql", "postgres", "postgresql", "sqlite", "duckdb", "spreadsheet", "dashboard", "bi", "business-intelligence", "etl", "data-engineering", "data-science", "jupyter", "pandas", "visualization", "charts", "observability-data", "warehouse", "lakehouse", "dataframe"],
-    text: [/analytics/i, /\bdatabase\b/i, /\bsql\b/i, /postgres|sqlite|duckdb|clickhouse/i, /spreadsheet/i, /dashboard/i, /\betl\b|data pipeline|data engineering/i, /data science/i, /visuali[sz]ation|charts?\b/i, /dataframe|pandas|polars/i, /business intelligence/i],
+    topics: ["data", "analytics", "database", "sql", "postgres", "postgresql", "sqlite", "duckdb", "spreadsheet", "dashboard", "bi", "business-intelligence", "etl", "data-engineering", "data-science", "jupyter", "pandas", "visualization", "charts", "observability-data", "warehouse", "lakehouse", "dataframe",
+      // Geospatial and mapping (H13): an OSINT-flavoured globe is a map, not a security tool.
+      "geospatial", "gis", "maps", "mapping", "cartography", "geospatial-intelligence", "spatial-intelligence", "geospatial-data", "remote-sensing", "satellite-imagery", "satellite-tracking", "flight-tracking", "3d-globe", "cesium", "openstreetmap"],
+    text: [/geospatial|\bgis\b|cartograph|remote sensing|satellite (tracking|imagery)|flight tracking|3d globe/i, /analytics/i, /\bdatabase\b/i, /\bsql\b/i, /postgres|sqlite|duckdb|clickhouse/i, /spreadsheet/i, /dashboard/i, /\betl\b|data pipeline|data engineering/i, /data science/i, /visuali[sz]ation|charts?\b/i, /dataframe|pandas|polars/i, /business intelligence/i],
   },
   {
     category: "devtools",
